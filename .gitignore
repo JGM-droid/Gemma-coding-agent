@@ -1,0 +1,20 @@
+# Official competition data (tasks, repository snapshots, graphs, embeddings, wheels,
+# harness wheels, sample submission). Downloaded from Kaggle under the competition
+# rules; kept local only and never committed.
+kaggle_data/
+
+# Evaluation run artifacts (results dirs, console/server/memory logs). Local evidence
+# referenced by docs/EXPERIMENTS.md; not committed.
+results/
+
+# Model weights and archives, should any ever land inside the repo.
+*.gguf
+*.safetensors
+*.tgz
+*.tar.gz
+*.zip
+*.whl
+
+# Python virtual environments.
+.venv/
+venv/
