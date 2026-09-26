@@ -355,3 +355,37 @@ Most of the real friction was packaging and environment, not model quality.
 
 ### What changed because of this
 The next milestone is about a baseline agent and reproducible evaluation. Its scope will be reviewed and approved before any work starts (see [ROADMAP.md](ROADMAP.md)).
+
+---
+
+## 14. Checking the benchmark before using it, and why the design changed
+
+*This is a progress entry. Milestone 2 is not finished.*
+
+### What I was trying to prove
+That the small set of tasks I planned to measure (4 fastapi, 3 rich and 1 requests) could each be trusted as a fair test. A task is only useful if, on the unfixed code, its test really fails because of the bug, and if the test really exercises the code the agent will edit.
+
+### What I did
+I picked candidate tasks with a fixed rule (a hash of the task name, so I couldn't cherry-pick). Then I ran each one through the official sandbox with no model at all, just to see whether its tests fail in the right way. I call this the eligibility gate. Details and evidence are in [EXPERIMENTS.md](EXPERIMENTS.md).
+
+### Why I did it this way
+Measuring an agent on a task that is broken, or that secretly tests different code from what the agent edits, produces numbers that look meaningful but aren't. Checking first is cheap. Discovering it after 27 model runs would not be.
+
+### What happened
+Four things turned up:
+1. **One rich task hung.** Its new test never finished and was stopped after 300 seconds. It doesn't fail cleanly, so I ruled it out and fixed a rule for that case.
+2. **The harness keeps a hidden cache.** It unpacks the Python packages the tests need into a temporary folder the first time it runs, and never checks that folder again. The folder from Milestone 1 held only four packages, so every later run used that tiny setup no matter which packages I downloaded. Milestone 1's result was measured in that environment. I deleted only that folder, and the harness rebuilt it from the full official set.
+3. **FastAPI can't run here.** A package it needs (`typing_inspection`) isn't in the official package collection, so fastapi tasks fail to even load.
+4. **Requests tests the wrong code.** With the full package set, a ready-made copy of `requests` is installed, and the tests import that copy instead of the code the agent edits. So an untouched task already "passes", and an agent's changes would never be tested.
+
+### What failed or surprised me
+The hidden cache. The failure it caused looked like a missing package, and only reading the harness code showed that my downloads were being ignored. It also means my Milestone 1 pass, though genuine, ran in a smaller environment than I thought.
+
+### What I learned
+**Reproducibility:** a result is only comparable if the environment behind it is the same every time. A leftover temporary folder can silently change that environment, so the plan now has to rebuild it at fixed points and write down a fingerprint (a short code that changes if any file changes) to prove nothing drifted.
+
+### What changed because of this
+I stopped trying to force the original mix of repositories. Doing that would have meant adding packages from outside the official materials, which would make my benchmark differ from the competition's. Instead the benchmark is now 8 Rich tasks, run 3 times each, on the complete unmodified official package set. The requests positive control is gone, replaced by re-running the gates after the baseline to check that the environment stayed the same. The trade-off is that results describe Rich only. The roadmap records this.
+
+### What came next
+Download the rest of the official package set, rebuild the cache, and check Rich candidates one by one until 8 pass the gate or I've looked at 16.

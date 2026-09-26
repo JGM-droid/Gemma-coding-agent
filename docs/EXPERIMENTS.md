@@ -229,3 +229,177 @@ The helper scripts used to drive Milestone 1 were temporary and are not in the r
 - One easy task, one run, the smaller E4B surrogate. Performance, variance and 31B behaviour are unproven.
 - The agent's own test (`test_structures.py`) wasn't the task's target test.
 - The graph tools and the `code_analyzer` sub-agent weren't used.
+
+---
+
+## Milestone 2: Baseline Agent and Reproducible Evaluation (in progress)
+
+Findings from benchmark validation (WI-2.1 and WI-2.2). No model has been run in Milestone 2 so far. These findings changed the Milestone 2 design (see [ROADMAP.md](ROADMAP.md)).
+
+**Artifact locations** (local only, never committed):
+- `kaggle_data/`: the Milestone 1 files plus the Milestone 2 downloads below.
+- `results/m2_gate_*`: gate runs under the stale Milestone 1 wheel cache. `results/m2_gate2_*`: gate runs under the rebuilt cache.
+- WSL: the harness wheel cache at `/tmp/swegemma_sp_cache_v8/`.
+
+The helper scripts (a gate wrapper and an import-path probe) were temporary and are not in the repository. The gate command was the Milestone 1 `swegemma eval` command with `--skip-agent-patch --sandbox docker --image swebench-sandbox:latest --concurrency 1 --task-id <id>` and no `--models-yaml`. The default 300 s command timeout applied. The import-path probe replayed the harness's own Phase 2 setup functions in a throwaway container, applied `test_patch`, and ran a one-line test printing `<package>.__file__` under the harness's own pytest command.
+
+---
+
+### Experiment: Selection and feasibility survey (WI-2.1)
+
+**Goal:** choose the dev tasks by a mechanical rule and check whether the official materials could support them.
+
+**Method:** local `tasks.jsonl` metadata only (repo, `instance_id`, `base_commit`, files touched by the gold `patch`). Problem statements were not used for selection. Sizes came from the Kaggle Data page file listing (read-only).
+
+**Result:** PARTIAL PASS (selection and sizes settled; environment support was unknown at this point).
+
+**Evidence:**
+- Population: gold patch changes exactly one file, excluding `httpx` (its one task changes 7 files) and `requests_6644`. That leaves 90 tasks: fastapi 43, rich 37, requests 10.
+- Order within each repo: ascending `sha256(instance_id)`.
+- The initial design was 4 fastapi, 3 rich and 1 requests.
+- The first 16 rich candidates in hash order: rich_3894, rich_3772, rich_3278, rich_4076, rich_3905, rich_3472, rich_4079, rich_3470, rich_3130, rich_3061, rich_3521, rich_3782, rich_3296, rich_3043, rich_3953, rich_3469.
+- Snapshots: fastapi 211 to 335 MB each, rich about 91 to 97 MB, requests about 36 to 38 MB. Graphs and embeddings are 1 to 6 MB each.
+- The official wheel folder holds 124 files, about 27.8 MB in total (approximate: the sum of per-file sizes shown in the listing, which are rounded). It is one shared pool, not per task.
+- Installed harness code (`container_setup.py`, `_deduplicate_wheels`) keeps only the newest Python 3.13-compatible wheel per package. Older versions are never injected. VERIFIED from code.
+
+**Interpretation:** the wheel pool is small, and listing-based estimates place the worst-case Milestone 2 download total at approximately 1.9 GB, which is expected to fit within the 2 GB cap. Because some source sizes are rounded, the cap remains a hard runtime boundary: stop before any download that would cause the measured cumulative total to exceed 2 GB. Whether the sandbox could run fastapi and rich tasks was unknown at this point.
+
+**Limitations:** the wheel total is a sum of rounded listing values, not exact bytes.
+
+---
+
+### Experiment: Stage 1 eligibility gates under the stale 4-wheel cache
+
+**Goal:** check that rich and requests candidates fail their target tests by assertion in the official Docker sandbox.
+
+**Method:** downloaded (via Claude in Chrome, with the owner's signed-in Kaggle session) the snapshots, graphs and embeddings for `rich_3894`, `rich_3772`, `rich_3278` and `requests_7427`, plus 45 wheel files (the 37 the harness selection needs plus 8 older versions fetched by mistake). The 4 wheels from Milestone 1 were already present. The gates ran before the stale cache was discovered (next experiments).
+
+**Result:** PARTIAL PASS (three of four eligible under this cache).
+
+**Evidence:**
+- Downloads: all sizes matched Kaggle's listing, and the four `.tgz` files passed `gzip -t`. New task files 336.39 MB and 45 new wheels 12.13 MB, so 348.52 MB.
+- `rich_3894` (95,693,148 B, SHA-256 prefix `0f5d343dab89018c`): `resolved=false`, 1 failed (`test_qualname_in_slots`, an assertion caused by a `TypeError` in `rich/text.py`).
+- `rich_3278` (92,497,686 B, `bda96e09e9e02fa3`): `resolved=false`, 16 assertion failures in `test_strip_private_escape_sequences[…]`.
+- `requests_7427` (37,176,965 B, `d8f2092187969feb`): `resolved=false`, 1 failed and 215 passed (`test_should_bypass_proxies_no_proxy_domain_boundary[http://prelocalhost/-False]`, `assert True == False`).
+- Determinism: `requests_7427` was run twice. Both runs gave the same result and identical logs apart from timing.
+- Import-path probe (workspace code under test): `rich.__file__ = /workspace/rich/__init__.py` for both rich tasks, and `requests.__file__ = /workspace/src/requests/__init__.py`.
+
+**Interpretation:** under this environment the three tasks were valid fail-to-pass tasks. The conclusion for `requests_7427` changed after the cache was rebuilt (below).
+
+**Limitations:** only prefixes of the SHA-256 values are recorded here. The full values were printed in the work-item report.
+
+---
+
+### Experiment: `rich_3772` timeout
+
+**Goal:** gate `rich_3772`.
+
+**Result:** INELIGIBLE. VERIFIED.
+
+**Evidence:**
+- Test exit code 124 (the command timed out) after 308.8 s. The rerun gave 308.1 s and the same outcome, so it is reproducible.
+- A diagnostic replay showed every earlier test in `tests/test_traceback.py` passing. The hang is in `test_recursive_exception`, the test added by the task's `test_patch`.
+- No assertion failure was produced.
+- The project owner then fixed an additional skip reason: the gate may not exceed the frozen 300-second command timeout. This rule was stated after `rich_3772` was observed. It applies to it because the task already failed the original gate requirement (fail on an assertion).
+
+**Interpretation:** the unfixed bug probably causes an unterminated loop, which would explain the hang. That cause is UNPROVEN.
+
+---
+
+### Experiment: Harness wheel cache discovery
+
+**Goal:** explain why fastapi failed to import `starlette` although `starlette-1.6.0` was in the wheel pool.
+
+**Method:** read the installed harness code (`swegemma/harness/container_setup.py`) and inspected the WSL temp directory.
+
+**Result:** finding. VERIFIED.
+
+**Evidence:**
+- `_build_unpacked_wheels_tar` writes the unpacked wheels to `/tmp/swegemma_sp_cache_v8/sp_base.tar` (inside WSL) and returns it if it already exists. The cache is keyed only by file name. Adding, removing or changing wheels does not invalidate it.
+- The cache found on 2026-09-25 was created at 14:51 during Milestone 1. It was 1,802,240 bytes and held only `certifi`, `charset_normalizer`, `idna` and `urllib3`. So Milestone 1's `requests_6644` PASS and the Stage 1 gates above ran under a 4-wheel dependency environment, regardless of the wheels present in `kaggle_data/wheels/`.
+- After the owner approved deleting only that directory, the next run rebuilt it: 37,683,200 bytes, holding the pool's newest wheels (starlette, pydantic, pydantic_core, annotated_types, anyio, httpx, httpcore, fastapi, requests, rich, flask, jinja2, typer, pygments, markdown_it and others).
+- Nothing else was modified: no repository file, harness source, image, Dockerfile, `sample_submission` or wheel.
+
+**Interpretation:** the dependency environment silently depends on a temporary directory that outlives runs. Results are only comparable if the cache is rebuilt at defined points and fingerprinted (Milestone 2 decision D8).
+
+**Limitations:** the cache lives in `/tmp` in WSL. A WSL restart could delete it and change results without warning. That has not been tested.
+
+---
+
+### Experiment: FastAPI probe (`fastapi_11355`)
+
+**Goal:** find out whether fastapi tasks can run in the unmodified official environment.
+
+**Method:** downloaded `fastapi_11355` (snapshot 229,097,851 B, SHA-256 prefix `221c813ac48ec994`; graph 4,393,596 B; embedding 4,877,106 B; 238.4 MB in total; cumulative Milestone 2 download 586.9 MB). Ran the gate under the stale cache and again after rebuilding it.
+
+**Result:** INELIGIBLE. VERIFIED.
+
+**Evidence:**
+- Stale cache: `resolved=false`, exit 2, collection error `ModuleNotFoundError: No module named 'starlette'`. The traceback shows the workspace `fastapi/__init__.py`, so workspace code is under test.
+- Rebuilt cache: starlette imports. The next failure is at pydantic: `fastapi/types.py:5 from pydantic import BaseModel` → `pydantic/errors.py:9 from typing_inspection.introspection import Qualifier` → `ModuleNotFoundError: No module named 'typing_inspection'`. Exit 2, 10.4 s.
+- `pydantic-2.13.4` declares `typing-inspection>=0.4.2` as a required dependency (read from the wheel's `METADATA`). No `typing_inspection` wheel exists in the official 124-file listing. VERIFIED.
+- `h11` (required by `httpcore`, so by the `httpx` client Starlette's `TestClient` uses) and `annotated-doc` (required by the pool's own fastapi wheel) are also absent from the listing. Whether they would fail in practice is UNPROVEN, because the run stops earlier.
+
+**Interpretation:** every fastapi task imports pydantic, so fastapi cannot run in the official environment unless the environment changes (an extra package from outside the official materials). That is not permitted in Milestone 2.
+
+**Limitations:** only one fastapi task was probed. The other fastapi candidates were not downloaded.
+
+---
+
+### Experiment: Requests shadowing under the rebuilt cache
+
+**Goal:** re-verify `requests_7427` under the rebuilt cache.
+
+**Result:** INELIGIBLE. VERIFIED.
+
+**Evidence:**
+- Rebuilt cache, no patch: `resolved=true`, exit 0, 216 passed and 13 skipped. The same result twice, with identical logs (so deterministic).
+- The probe reports `requests.__file__ = /usr/local/lib/python3.13/site-packages/requests/__init__.py`. That is the pool's `requests-2.34.2` wheel, which already contains the fix. The workspace code is at `/workspace/src/requests`.
+- `sys.path[:4]` starts with `/workspace`. Because requests uses a `src/` layout, `/workspace` does not contain a `requests` package.
+
+**Interpretation:** under this environment, tests exercise the installed wheel. An agent edit to `/workspace/src/requests` would not be tested. Requests tasks therefore cannot measure agent edits here. The Milestone 1 control `requests_6644` (also `src/` layout) would probably behave the same way under the rebuilt cache, but it has not been re-run.
+
+**Limitations:** the ordering of `sys.path` entries was observed but not traced to its source. Only one requests task was tested.
+
+---
+
+### Experiment: Rich under the rebuilt cache
+
+**Goal:** re-verify the rich gates under the rebuilt cache.
+
+**Result:** `rich_3894` and `rich_3278` are ELIGIBLE. VERIFIED.
+
+**Evidence:**
+- `rich_3894`: `resolved=false`, exit 1, same assertion failure as before.
+- `rich_3278`: `resolved=false`, exit 1, same 16 assertion failures.
+- The probe shows `rich.__file__ = /workspace/rich/__init__.py` for both, although the rebuilt cache now contains a `rich` directory in site-packages (from the pool's `rich-15.0.0` wheel). `sys.path[0]` is `/workspace`, and rich uses a flat layout, so `/workspace/rich` is found first.
+- `rich_3772` remains ineligible.
+
+**Limitations:** why `/workspace` is first on `sys.path` was not traced (possibly pytest's handling of the root `conftest.py`). That is UNPROVEN.
+
+---
+
+### Milestone 2 validation summary
+
+**VERIFIED**
+- The official wheel pool has 124 files.
+- The harness wheel cache is keyed by name only and was stale from Milestone 1.
+- `rich_3894` and `rich_3278` are eligible under both the stale and the rebuilt cache, with workspace code under test.
+- `rich_3772` is ineligible (reproducible timeout at the 300 s command limit).
+- `fastapi_11355` cannot import pydantic because `typing_inspection` is not in the official wheel listing.
+- `requests_7427` resolves with no patch under the rebuilt cache because the installed wheel shadows the workspace.
+- Determinism: `requests_7427` gave identical results twice under both caches.
+
+**PARTIAL**
+- FastAPI as a whole repository: one task was probed. The missing package affects every task that imports pydantic, but the other fastapi tasks were not run.
+- The requests conclusion rests on one task and one probe.
+- The wheel-pool size (about 27.8 MB) is a sum of rounded listing values.
+
+**UNPROVEN**
+- Whether `h11` or `annotated-doc` would also fail for fastapi.
+- What makes the `rich_3772` test hang.
+- Why `/workspace` is first on `sys.path`.
+- Whether the Milestone 1 control `requests_6644` would shadow under the rebuilt cache.
+- Whether official Kaggle scoring uses the same wheel-injection behaviour.
+- Whether a WSL restart clears the cache.
+- Determinism of an eligible rich task under the rebuilt cache (not yet repeated).
