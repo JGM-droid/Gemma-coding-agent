@@ -389,6 +389,7 @@ The helper scripts (a gate wrapper and an import-path probe) were temporary and 
 - `fastapi_11355` cannot import pydantic because `typing_inspection` is not in the official wheel listing.
 - `requests_7427` resolves with no patch under the rebuilt cache because the installed wheel shadows the workspace.
 - Determinism: `requests_7427` gave identical results twice under both caches.
+- Determinism of an eligible Rich task under the canonical environment: `rich_3894` gave identical results in three gate runs (status changed from UNPROVEN, see the WI-2.2c record below).
 
 **PARTIAL**
 - FastAPI as a whole repository: one task was probed. The missing package affects every task that imports pydantic, but the other fastapi tasks were not run.
@@ -402,7 +403,6 @@ The helper scripts (a gate wrapper and an import-path probe) were temporary and 
 - Whether the Milestone 1 control `requests_6644` would shadow under the rebuilt cache.
 - Whether official Kaggle scoring uses the same wheel-injection behaviour.
 - Whether a WSL restart clears the cache.
-- Determinism of an eligible rich task under the rebuilt cache (not yet repeated).
 
 ---
 
@@ -462,3 +462,68 @@ The helper scripts (a gate wrapper and an import-path probe) were temporary and 
 - `max_output_tokens` 16384 reaching the server (not observable per request).
 - Whether the harness sends the thinking budget of 4096 and llama.cpp ignores it. The server logged an effectively unlimited reasoning budget (2147483647), so the 4096 budget was not visibly enforced.
 - How consistent this run's speed and tool use are across other tasks.
+
+---
+
+### Experiment: WI-2.2c, Rich eligibility walk under the canonical environment
+
+**Goal:** establish the eligible Rich dev-task set under the canonical environment, with no model.
+
+**Method:**
+- Canonical wheel pool: 124 official wheels, 27,810,465 bytes, pool fingerprint `e02d3059f9c04716d0b6e46d90364a5370e45385b284ab8c1c56a9c0d63aba60`.
+- Cleared only `/tmp/swegemma_sp_cache_v8/` and let the first gate rebuild it. Canonical eligibility-session cache: `sp_base.tar`, 37,683,200 bytes, member-list fingerprint `c52a777befd2b12c719eb6363c547a82f3fe1c8e1f5821d72beea3a4e612bc47`.
+- Walked the deterministic Rich order (see the WI-2.1 record) from rank 1. For each candidate not yet local, downloaded only its snapshot, graph and embedding (Chrome, signed-in Kaggle session), checked filename, size against Kaggle's listing and archive integrity, then ran the gate: `--skip-agent-patch --sandbox docker --image swebench-sandbox:latest --concurrency 1` at the 300 s command timeout, in a fresh results directory (`results/m2_canon_*`), plus the import-path probe.
+- Stopped once 8 tasks were eligible.
+
+**Result:** PASS. 8 eligible tasks after walking 10 candidates.
+
+**Evidence:**
+
+| Rank | Task | Gate | Verdict |
+|---|---|---|---|
+| 1 | `rich_3894` | exit 1; 1 failed, `test_inspect.py::test_qualname_in_slots` | eligible |
+| 2 | `rich_3772` | 309.9 s, exit 124, `resolved=false`, no assertion failure | **ineligible** |
+| 3 | `rich_3278` | exit 1; 16 failed, `test_ansi.py::test_strip_private_escape_sequences[…]` | eligible |
+| 4 | `rich_4076` | exit 1; 4 failed in `test_ansi.py` | eligible |
+| 5 | `rich_3905` | exit 1; 1 failed, `test_progress.py::test_no_output_if_progress_is_disabled_non_interactive` | eligible |
+| 6 | `rich_3472` | exit 2; collection error `ModuleNotFoundError: No module named 'attr'` (`tests/test_pretty.py:9`) | **ineligible** |
+| 7 | `rich_4079` | exit 1; 1 failed, `test_markdown.py::test_inline_code_in_table_cells` | eligible |
+| 8 | `rich_3470` | exit 1; 1 failed, `test_console.py::test_capture_and_record` | eligible |
+| 9 | `rich_3130` | exit 1; 5 failed in `test_markdown.py` | eligible |
+| 10 | `rich_3061` | exit 1; 12 failed in `test_panel.py` and `test_text.py`, 11 assertions and 1 `AttributeError` for a method the fix adds (`Text.extend_style`) | eligible |
+
+- **Frozen eligible Rich tasks, in order:** `rich_3894`, `rich_3278`, `rich_4076`, `rich_3905`, `rich_4079`, `rich_3470`, `rich_3130`, `rich_3061`.
+- **Recorded ineligible candidates:**
+  - `rich_3772`: the gate exceeds the frozen 300-second timeout under the canonical environment. The canonical re-check took 309.9 s with exit 124 and `resolved=false` (earlier runs under the stale cache also timed out).
+  - `rich_3472`: collection failure, because `attr` (`attrs`) is not in the official dependency pool.
+- **Workspace code:** every eligible task's import-path probe reported `rich.__file__ = /workspace/rich/__init__.py`.
+- **Environment:** the pool fingerprint and the cache fingerprint were unchanged throughout, checked again at the end. `git status` stayed clean.
+- **Determinism:** `rich_3894` was gated three times under the same canonical cache. All three runs gave `resolved=false`, exit 1, the same failing test ID (`tests/test_inspect.py::test_qualname_in_slots`), the same failure types, and workspace code imported. The pytest logs are identical apart from timing.
+- **Downloads:**
+  - WI-2.2c incremental: 690,756,307 bytes (21 files, seven candidates: `rich_4076`, `rich_3905`, `rich_3472`, `rich_4079`, `rich_3470`, `rich_3130`, `rich_3061`).
+  - Exact Milestone 2 cumulative after WI-2.2c: 1,292,763,887 bytes, recomputed from the local files. It counts files downloaded in Milestone 2 only, and excludes the three `requests_6644` files and the four wheels from Milestone 1.
+  - Remaining headroom under the 2,000,000,000-byte working cap: 707,236,113 bytes.
+
+**Anomalies:**
+- `rich_3905`: one gate was run before its files had downloaded and returned "Snapshot file not found". That result was discarded, not treated as a gate result, and its results directory was deleted. The gate was re-run after a verified download.
+- `rich_3130`: a temporary browser interruption stopped one download batch. The file accounting was reconciled and the cumulative total was recomputed from the files on disk.
+
+**Interpretation:** eight Rich tasks fail in the intended way under the canonical environment with the workspace code under test, and the gate is deterministic for the task tested.
+
+**Limitations:**
+- No gold-patch grader exists, so a task may fail for reasons the gate cannot detect. The `test_markdown.py` tasks (`rich_3130`, `rich_4079`) may be environment-sensitive.
+- No agent or baseline result is recorded here.
+
+**VERIFIED**
+- 8 eligible Rich tasks, and the two ineligible candidates with their reasons.
+- Workspace Rich code under test for every eligible task.
+- Pool and cache fingerprints unchanged.
+- Determinism of `rich_3894` across three gate runs.
+- The download accounting above.
+
+**PARTIAL**
+- Determinism was tested on one task, not all eight.
+
+**UNPROVEN**
+- Whether the `test_markdown.py` failures would also occur with the gold fix (no gold-patch grader).
+- What makes `rich_3772` hang.
