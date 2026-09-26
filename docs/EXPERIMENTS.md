@@ -403,3 +403,62 @@ The helper scripts (a gate wrapper and an import-path probe) were temporary and 
 - Whether official Kaggle scoring uses the same wheel-injection behaviour.
 - Whether a WSL restart clears the cache.
 - Determinism of an eligible rich task under the rebuilt cache (not yet repeated).
+
+---
+
+### Experiment: Milestone 2 dry run (`rich_3894`)
+
+**Goal:** validate the frozen runbook, model-server path, harness invocation, environment fingerprints and artifact generation with one real agent run, before the 24 measured baseline runs. This is a procedure and infrastructure check only. **It is not one of the 24 measured baseline runs**, and its model result must not be used to tune anything (see [EVALUATION.md](EVALUATION.md)).
+
+**Result:** procedure **PASS**. Model result **NOT RESOLVED**.
+
+**Method:**
+- Preconditions: HEAD `27ceeb5`, clean tree, 124 wheels, pool fingerprint checked.
+- Cleared only `/tmp/swegemma_sp_cache_v8/`; the harness rebuilt it during the run.
+- Started the existing `gemma4-e4b-server` container (`docker start`, not recreated).
+- Ran exactly one task, with no other dev task:
+  ```bash
+  source /home/jesse/venvs/gemma4-harness/bin/activate
+  swegemma eval --tasks kaggle_data/tasks.jsonl --snapshots-dir kaggle_data/snapshots \
+    --submission-dir kaggle_data/sample_submission --results-dir results/m2_dryrun \
+    --image swebench-sandbox:latest --sandbox docker --models-yaml /home/jesse/gemma4-dev/dev_models.yaml \
+    --task-ids rich_3894 \
+    --max-tool-calls 30 --max-time-minutes 20 --timeout-seconds 300 \
+    --concurrency 1 --display single --verbose
+  ```
+  It exited with code 0. A background logger sampled VRAM and WSL memory every 3 s.
+
+**Evidence:**
+- **Environment:** 124 wheels; pool fingerprint `e02d3059f9c04716d0b6e46d90364a5370e45385b284ab8c1c56a9c0d63aba60`; rebuilt cache `sp_base.tar` 37,683,200 bytes, fingerprint `c52a777befd2b12c719eb6363c547a82f3fe1c8e1f5821d72beea3a4e612bc47`. Both fingerprints were unchanged after the run.
+- **Server:** the container started healthy, `/v1/models` returned `gemma-4-e4b-it`, the three names in `dev_models.yaml` resolve to it, and the server log showed no restart, out-of-memory or error.
+- **Run:** 7 LLM calls (prompt tokens 68,319 of which 52,940 cached; completion tokens 3,016). The harness counted 5 of 30 tool calls; 6 executed, all status ok: `run_command` (find), `read_file` (`rich/_inspect.py`), `edit_file` (`rich/_inspect.py`), `run_command` (find), `run_command` (`pytest tests/test_inspect.py`), `submit_patch`. `submit_patch` was called with a patch of 815 bytes in 1 file.
+- **Time and resources:** wall time 72.95 s, agent time about 51 s. No timeout, out-of-memory or crash. Peak VRAM 5,876 MiB of 8,192. Peak WSL RAM 4,039 MiB used and peak swap 1,192 MiB (33 samples).
+- **Phase 2:** `resolved=false`, exit 1, `7 failed, 35 passed, 4 skipped`. The target test `test_qualname_in_slots` no longer fails. The patch introduced seven regressions in `tests/test_inspect.py` (`test_render`, `test_inspect_module_with_class`, and five `test_can_handle_special_characters_in_docstrings[…]` variants). The patch replaced `name or getattr(obj, "__qualname__", name)` with a chain that prefers `__qualname__`, then `__name__`, then `name`, so the explicit `name` lost priority. Failure category: Phase 2 tests failed.
+- **Workspace code under test:** the agent's edit to `/workspace/rich/_inspect.py` changed which tests fail (one fixed, seven newly failing), so the workspace code was what ran.
+- **Sampling, as observed in the llama.cpp server log (`-lv 4`), 7 requests:**
+  - `temp = 0.200` and `top_p = 0.950` on all 7.
+  - `top_k = 64` and `min_p = 0.05` also applied. These are server defaults, not settings the submission controls.
+  - `common_reasoning: activated, budget=2147483647 tokens` (effectively unlimited reasoning budget).
+  - No per-request output limit is logged. The longest reply was 2,144 tokens.
+  - The trace has `thinking` events on the 7 model steps.
+- **Artifacts** (local, ignored): `results/m2_dryrun/` (`summary.json`, `task_results.jsonl`, `patches/rich_3894.patch`, `test_outputs/rich_3894.log`, `traces/trace_rich_3894.json`, `logs/rich_3894.log`), plus `results/m2_dryrun_console.log` and `results/m2_dryrun_resources.log`.
+
+**Interpretation:** the end-to-end procedure works in the frozen environment. The model did not solve the task: it fixed the target failure but broke seven other tests. That is a model-quality result and is not a reason to change the baseline.
+
+**Limitations:** one run of one task. It says nothing about the baseline pass rate.
+
+**VERIFIED**
+- The workflow ran end to end (server, harness, tools, patch capture, Phase 2, artifacts) with `resolved=false`.
+- Pool and cache fingerprints were unchanged, and the repository stayed clean.
+- Temperature 0.2 and top_p 0.95 reached the llama.cpp server.
+- Workspace code was under test.
+- No timeout, out-of-memory or crash occurred.
+
+**PARTIAL**
+- Whether "thoughts included" is honoured: the trace holds thinking events, but their cause (submission setting or server default) is not shown.
+- Resource peaks come from 3-second samples of one run.
+
+**UNPROVEN**
+- `max_output_tokens` 16384 reaching the server (not observable per request).
+- Whether the harness sends the thinking budget of 4096 and llama.cpp ignores it. The server logged an effectively unlimited reasoning budget (2147483647), so the 4096 budget was not visibly enforced.
+- How consistent this run's speed and tool use are across other tasks.

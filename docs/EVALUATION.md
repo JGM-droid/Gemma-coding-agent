@@ -107,7 +107,15 @@ models:
 - command timeout: **300 seconds** (`--timeout-seconds 300`)
 - `--max-turns` is **omitted**. Milestone 1 omitted it. The harness then applies no turn budget, and falls back internally to 500 LLM calls (VERIFIED from the installed `agent_runner.py`). Passing 500 explicitly would also add a "max loop iterations" line to the task prompt and so change behaviour, so the baseline keeps the omission.
 
-**Sampling** (from `sample_submission/configs/sampling.yaml`, unmodified): temperature 0.2, top_p 0.95, `max_output_tokens` 16384, thinking budget 4096 with thoughts included. There is **no fixed seed**, and none is added. The model is stochastic, so identical outputs are not claimed. Repeats are used instead. Whether these settings reach the llama.cpp server is confirmed in the dry run.
+**Sampling** (from `sample_submission/configs/sampling.yaml`, unmodified): temperature 0.2, top_p 0.95, `max_output_tokens` 16384, thinking budget 4096 with thoughts included. There is **no fixed seed**, and none is added. The model is stochastic, so identical outputs are not claimed. Repeats are used instead.
+
+**What reaches the server** (observed in the dry run on `rich_3894`, from the llama.cpp server log at `-lv 4`; see [EXPERIMENTS.md](EXPERIMENTS.md)). The submission settings above are unchanged. This describes what was observed:
+- **VERIFIED:** temperature 0.2 and top_p 0.95 reached the server (`temp = 0.200`, `top_p = 0.950` on all 7 requests).
+- **UNPROVEN:** `max_output_tokens` 16384 was not directly observable per request. The longest reply was 2,144 tokens.
+- **PARTIAL / NOT OBSERVED:** the thinking budget of 4096 was not visibly enforced. The server logged an effectively unlimited reasoning budget (`common_reasoning: activated, budget=2147483647 tokens`). Traces contain `thinking` events, but whether "thoughts included" is controlled by the submission setting or by a server default is not proven.
+- **Observed server defaults, not submission-controlled settings:** `top_k = 64` and `min_p = 0.05`.
+
+The baseline preserves this observed behavior exactly as-is. The dry run revealed the behavior; it does not authorize tuning or changing it before r1.
 
 ## 5. Baseline runs
 
