@@ -733,3 +733,78 @@ swegemma eval --tasks kaggle_data/tasks.jsonl --snapshots-dir kaggle_data/snapsh
 **UNPROVEN**
 - General coding performance or competition-relevant conclusions. This is one non-counted diagnostic task, explicitly excluded from any x/3 tally.
 - Whether the graph tools would behave identically inside the live loop if a task caused the model to actually call them (no task has yet forced that in this repaired environment).
+
+---
+
+### Experiment: Milestone 2 baseline v2, repeat 1 (`m2_baseline_v2_r1`) — COUNTED
+
+**This is one of the 24 measured baseline runs (D1/D5/D6, EVALUATION.md).** Its `resolved` values count toward the frozen 8-task × 3-repeat baseline tally, per Amendment 1 §11.5 step 5. It is the first repeat after the two invalid/diagnostic attempts (`m2_baseline_r1` and the two corrective dry runs) recorded above.
+
+**Precondition (VERIFIED):** branch `main`, HEAD `261370c`, clean, synced with `origin/main`, before and after. Pool fingerprint recomputed and confirmed unchanged: `e02d3059f9c04716d0b6e46d90364a5370e45385b284ab8c1c56a9c0d63aba60`, 124 files. Cache cleared (`/tmp/swegemma_sp_cache_v8/` was already absent from the prior corrective dry run; `rm -rf` run explicitly as a no-op), then rebuilt by the run itself; the cache fingerprint after the first task's setup matched the frozen value exactly: `c52a777befd2b12c719eb6363c547a82f3fe1c8e1f5821d72beea3a4e612bc47`. OpenClaw inactive and disabled throughout. RAM before: 1,757 MiB used, 6,152 MiB available; swap 5/2,048. GPU: RTX 3070, 8,192 MiB, ~1.56 GiB used by unrelated processes. Disk: 946 GB free. Model file SHA-256 reverified: `676c35070db6dbe52f93e9c864ee0fba4eddea94b9c875d9cb10daff453fbaee` (matches the frozen pin). All 8 dev tasks' snapshots, `tasks.jsonl` entries, graph JSON files and embedding NPZ files verified present for their exact base commits before starting. `cachetools` 7.2.0 and `networkx` 3.7 confirmed importable from the exact harness venv that ran `swegemma eval`.
+
+**Result namespace:** `results/m2_baseline_v2_r1/` (console log `results/m2_baseline_v2_r1_console.log`, resource log `results/m2_baseline_v2_r1_resources.log`), confirmed absent before the run and not present anywhere else in the repository. `results/m2_baseline_r1/` (hashes reverified unchanged: `summary.json` `f05158a9…b7f79`, `task_results.jsonl` `0b7d7ab…639ce`), `results/m2_dryrun/` and `results/m2_dryrun_v2/` were not written to or modified.
+
+**Server.** `docker start gemma4-e4b-server` (existing container, pinned digest `ghcr.io/ggml-org/llama.cpp:server-cuda12@sha256:1f4b9cf58982dd4d7cc497aea31b1a456ca9a3a1f94f527d317d3fdee0d60ab6`). Ready within 18 s (`gemma-4-e4b-it`, context 32,768, `Q4_0`). `RestartCount` 0 and `OOMKilled` false for the whole run. Stopped after the run.
+
+**Telemetry.** The corrective dry run's telemetry logger died because it was launched with `nohup … &` but not detached from the WSL session; investigation traced this to WSL's own idle-VM shutdown closing the whole distro instance between tool calls with no open connection, not merely orphaning the process. The fix: a dedicated long-lived `Monitor`-driven `wsl` connection was kept open continuously for the run's duration (re-armed once, at its ~30-minute internal window boundary, with no gap) purely to prevent that idle shutdown, while a separate `setsid`-launched shell script (`/tmp/reslogger.sh`) appended one `timestamp mem_used_mb mem_avail_mb swap_used_mb gpu_used_mib` line every 10 s to `results/m2_baseline_v2_r1_resources.log`. This is host telemetry only, written outside `results/m2_baseline_v2_r1/`'s harness-owned files, and never fed into task evaluation. The logger's PID (5534) was confirmed alive immediately after launch and again after the baseline process (PID 5592) was confirmed running, and was killed cleanly after the run. **128 samples were captured, spanning 18:58:35–19:19:52 UTC**, covering the run's full duration (server start to task 8 completion) with no gap.
+
+**Invocation** (exact, from EVALUATION.md §5, restricted only by result directory):
+```bash
+swegemma eval --tasks kaggle_data/tasks.jsonl --snapshots-dir kaggle_data/snapshots \
+  --submission-dir kaggle_data/sample_submission --results-dir results/m2_baseline_v2_r1 \
+  --image swebench-sandbox:latest --sandbox docker --models-yaml /home/jesse/gemma4-dev/dev_models.yaml \
+  --task-ids rich_3894 rich_3278 rich_4076 rich_3905 rich_4079 rich_3470 rich_3130 rich_3061 \
+  --max-tool-calls 30 --max-time-minutes 20 --timeout-seconds 300 \
+  --concurrency 1 --display single --verbose
+```
+The harness executed the 8 tasks in `tasks.jsonl` order (not the `--task-ids` order), matching EVALUATION.md §5: `rich_4079`, `rich_4076`, `rich_3894`, `rich_3905`, `rich_3470`, `rich_3278`, `rich_3130`, `rich_3061`.
+
+**Per-task result** (from `results/m2_baseline_v2_r1/task_results.jsonl` and `summary.json`, the primary evidence; console impressions used only to add tool/graph-usage detail):
+
+| # | Task | Resolved | Patch size | Test exit | Tool calls | LLM calls | Duration (s) | Error | Category |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | `rich_4079` | false | 722 | 1 | 10 | 12 | 89.47 | null | Phase 2 tests failed |
+| 2 | `rich_4076` | false | 606 | 1 | 13 | 15 | 88.07 | null | Phase 2 tests failed |
+| 3 | `rich_3894` | false | 698 | 1 | 7 | 9 | 55.77 | null | Phase 2 tests failed |
+| 4 | `rich_3905` | **true** | 521 | 0 | 7 | 9 | 48.91 | null | resolved |
+| 5 | `rich_3470` | false | 602 | 1 | 20 | 26 | 173.63 | null | Phase 2 tests failed |
+| 6 | `rich_3278` | false | 0 | 1 | 20 | 24 | 147.10 | null | empty patch |
+| 7 | `rich_3130` | false | 0 | 1 | 30 | 38 | 215.55 | null | budget exhausted (30/30 tool calls), then empty patch |
+| 8 | `rich_3061` | false | 0 | -1 | 21 | 23 | 375.83 | `Sandbox execution error: Unterminated string starting at: line 1 column 12 (char 11)` | infra-adjacent model output error (see below) |
+
+**Aggregate (from `summary.json`):** `total_tasks=8`, `resolved=1`, `resolution_rate=0.125`, `errors=1`. As x/3 so far (repeat 1 of 3): `rich_4079` 0/3, `rich_4076` 0/3, `rich_3894` 0/3, `rich_3905` 1/3, `rich_3470` 0/3, `rich_3278` 0/3, `rich_3130` 0/3, `rich_3061` 0/3. No stable-pass or stable-fail classification is made after only 1 of 3 repeats (EVALUATION.md §7 requires all 3).
+
+**Graph-tool usage (observed, factual, not treated as quality evidence):** the graph/search tools were invoked by the live agent loop in 6 of 8 tasks (`rich_4079`, `rich_4076`, `rich_3894` at the root-agent level; `rich_3470`, `rich_3278`, `rich_3130` via the `code_analyzer_agent` sub-agent calling `search_similar_code` and, in `rich_3130`, `get_code_neighbors`), each with `status: ok`, `SimilaritySearchError`-free responses (some legitimately empty, `count: 0`, when no similar node existed). `rich_3905` and `rich_3061` did not invoke a graph tool. This is the first baseline evidence that the graph and sub-agent (`agent_tool`) path works inside the real, unmodified `sample_submission` configuration, not just in the earlier stub-context smoke test.
+
+**Failure classification, per the precedence in EVALUATION.md §6:**
+- **Model/agent outcomes:** `rich_4079`, `rich_4076`, `rich_3894`, `rich_3470` — patch submitted, Phase 2 tests failed (assertion-level, matching each task's known target tests). `rich_3278` — agent's own final summary claimed a fix, but the actually submitted patch was empty (`patch_size: 0`, `files_changed: 0`) after four consecutive `FileEditError: old_string not found` attempts on `rich/ansi.py`; recorded as an empty-patch model failure, and the discrepancy between the agent's narrated success and the empty artifact is noted for the record.
+- **Budget outcome:** `rich_3130` exhausted the frozen 30-tool-call budget (`BudgetExceeded: Tool call budget exhausted (30 calls)`) while still searching for `TableDataElement`'s definition (the graph tool's `search_similar_code` and `get_code_neighbors` calls for this symbol returned no/unhelpful results across many attempts), then submitted an empty patch. Per §6's precedence order (infra, then no `submit_patch`, then empty patch, then patch not applied, then Phase 2 failed), this is classified as a budget/no-patch outcome, not an infrastructure failure.
+- **Context-budget failure, not infrastructure (Amendment 1 §11.3):** `rich_3061`'s final LLM call generated 11,913 completion tokens before the llama.cpp server itself truncated it (`stop processing: n_tokens = 32767, truncated = 1`), i.e. the request hit the frozen 32,768-token context window, not the `max_output_tokens` 16384 setting. The truncation cut a tool-call argument mid-string, and the harness correctly caught this and reported `Non-retryable model error: JSONDecodeError: Unterminated string starting at: line 1 column 12 (char 11)`, recorded in `task_results.jsonl` as `test_exit_code: -1` and the sandbox-execution error text above. This is a **context-budget failure per Amendment 1 §11.3**: it is explicitly *not*, by itself, an infrastructure rerun condition, and this run was **not rerun**, consistent with the model-failure-is-never-rerun rule (only a genuine infrastructure failure, e.g. OOM or container crash, would qualify for the one-time rerun in EVALUATION.md §6/§9's rerun rule, and neither occurred here).
+- **No infrastructure failure occurred in this run.** `docker ps` was clean throughout except for the expected per-task Phase 2 sandbox containers; `RestartCount` 0 and `OOMKilled` false for the model server for the whole run; no `ModuleNotFoundError` or `SimilaritySearchError` occurred; the harness process exited with `SWEGEMMA_EXIT_CODE=0` (a clean harness exit, independent of the individual tasks' model-level outcomes).
+
+**Resources (from the 128-sample telemetry log, 10 s cadence, full run coverage):**
+- RAM used climbed steadily across the batch as Docker layers/caches accumulated: from 2,186 MiB (run start) to a peak of **6,897 MiB** used (of 7,910 MiB total) during task 8 (`rich_3061`, the same task that caused the WSL/Docker stall in the original invalid r1 attempt 1). Available RAM reached a low of about 1.24 GiB but never zero.
+- Swap climbed from 40 MiB to a peak of **737 MiB** (of the 2,048 MiB cap) — well under the cap, and never reached it.
+- GPU used stayed in a narrow band, peak **5,017 MiB** of 8,192 MiB.
+- Unlike the original invalid r1 attempt 1 (WSL/Docker became unresponsive under similar or lesser pressure), **the host remained fully responsive throughout this run**: `docker ps`, `free -m` and the model server's `/v1/models` endpoint all answered promptly at every check during the memory-pressure window, and the harness itself completed and exited cleanly. This is treated as improved evidence for the corrective host changes (OpenClaw disabled, dependency repair), though the margin (about 1.0–1.2 GiB free RAM at the tightest point) remains narrow and worth watching in r2/r3.
+
+**Warnings/errors:** the known, harmless `RequestsDependencyWarning` about `charset_normalizer` at process start. Six `E srv send_error: request (34722 tokens) exceeds the available context size` lines appear in `docker logs gemma4-e4b-server`, but their timestamp format and exact wording match the already-documented `rich_4079` context-overflow error from the original invalid r1 attempt 1 (see above); `docker start` preserves a container's log history across restarts, and no task in this run's own console log or `task_results.jsonl` shows that error, so these are treated as stale, pre-existing log lines, not new errors from this run. The one genuine error this run produced (`rich_3061`'s `JSONDecodeError`) is documented above under context-budget failure.
+
+**Post-run validation:** `summary.json` and `task_results.jsonl` inspected directly (table above). Model server stopped cleanly after confirming `RestartCount`/`OOMKilled`. Telemetry logger confirmed alive throughout and stopped cleanly afterward. `docker ps` empty after stopping the server. OpenClaw confirmed inactive and disabled after the run. Final RAM/swap: 1,571 MiB used, 6,338 MiB available, swap 226/2,048 (recovered after the last sandbox container exited). `results/m2_baseline_r1/` hashes reverified unchanged.
+
+**VERIFIED**
+- All 8 frozen dev tasks ran under the exact frozen configuration (budgets, model, image, harness pins, environment fingerprints) and completed to a written `summary.json`/`task_results.jsonl`.
+- 1 of 8 tasks resolved (`rich_3905`).
+- No infrastructure failure occurred: 0 restarts, no OOM, no missing-dependency error, clean harness exit.
+- The graph/search tools and the `code_analyzer_agent` sub-agent both functioned correctly inside the real, unmodified agent loop across 6 of 8 tasks.
+- The host remained responsive under peak memory pressure (6,897 MiB used, 737 MiB swap) that resembled the pressure that stalled the original invalid r1 attempt 1.
+- `rich_3061`'s failure is a context-window overflow (32,768-token limit), not an infrastructure defect, per Amendment 1 §11.3, and was correctly not rerun.
+
+**PARTIAL**
+- The telemetry gap-recovery method (a long-lived keep-alive `wsl` connection) is evidence specific to this operating environment (Windows + WSL2) and was necessary only because of WSL's own idle-VM shutdown; it is not a change to the frozen experimental configuration.
+- `rich_3278`'s agent narrated a successful fix while submitting an empty patch; this discrepancy between the model's self-report and the actual artifact is recorded but not further analyzed here (out of scope for a measurement milestone).
+
+**UNPROVEN**
+- Task-level stability: only 1 of the frozen 3 repeats is complete. No task can yet be classified stable-pass, unstable or stable-fail (EVALUATION.md §7 requires all 3 repeats).
+- Whether `rich_3061`'s context overflow would recur in r2/r3 given the lack of a fixed seed (EVALUATION.md §4).
+- General coding performance, competition-relevant conclusions, or any comparison to a future change (the comparison rule in EVALUATION.md §7 requires the full 3-repeat baseline first).
