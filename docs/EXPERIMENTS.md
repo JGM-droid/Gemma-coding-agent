@@ -582,3 +582,63 @@ The helper scripts (a gate wrapper and an import-path probe) were temporary and 
 - That `cachetools>=5.0.0` is an unconditional dependency of `swegemma` 0.2.7 (reported by the audit, not re-checked here).
 - Whether other declared dependencies are missing (a diagnostic `pip check` is pending).
 - What consumed the WSL memory.
+
+---
+
+### Experiment: Milestone 2 corrective host environment (OpenClaw and graph-tool dependencies)
+
+**Goal:** remove the two causes found after the invalid r1 attempt 1: an unrelated auto-starting workload consuming WSL memory, and two missing declared dependencies of the pinned harness. No measurement was run.
+
+**Result:** PASS. No model, graph-tool smoke test, dry run, baseline run or eligibility gate was run in this work item, and the model server was not started.
+
+**Method and evidence**
+
+*Diagnosis after the approved `wsl --shutdown` recovery (read-only):*
+- After a fresh WSL start, `openclaw-gateway.service` (a systemd **user** service) started within about a second of boot and used 0.5 to 1.0 GB. It is enabled (`WantedBy=default.target`, enable link in `~/.config/systemd/user/default.target.wants/`), has `Restart=always`, and `loginctl` shows `Linger=yes`. That is VERIFIED automatic startup. No cron entry, PM2 directory or shell-startup reference was found.
+- `swegemma` 0.2.7 declares `cachetools>=5.0.0` and `networkx>=3.0` as unconditional requirements, and `swegemma/graph/graph_utils.py` imports both. Neither was installed, so the graph and search tools failed (`No module named 'cachetools'`; `networkx` would have failed next).
+
+*OpenClaw, changed to manual start only:*
+- Before: `active`, `enabled`, main PID 265, about 631 MiB RSS (systemd reported 792 MB).
+- Commands run:
+  ```bash
+  systemctl --user stop openclaw-gateway.service
+  systemctl --user disable openclaw-gateway.service
+  ```
+- After: `inactive`, `disabled`, no OpenClaw Node process remains, and the enablement link (and its now-empty `default.target.wants/` directory) was removed.
+- **Unchanged on purpose:** the service file `/home/jesse/.config/systemd/user/openclaw-gateway.service` still exists, with the same `ExecStart` and `Restart=always`. `Linger=yes` is unchanged. OpenClaw was not uninstalled or reconfigured, and was not started again.
+- Manual use, when wanted:
+  ```bash
+  systemctl --user start openclaw-gateway.service   # start manually
+  systemctl --user stop openclaw-gateway.service    # stop manually
+  ```
+- **WSL RAM (`free -m`):** before stopping, 2,133 MiB used and 5,776 MiB available. After, 1,537 MiB used and 6,372 MiB available. Swap 0 used throughout.
+
+*Host dependency repair, scoped to the two verified gaps only:*
+- Environment: `/home/jesse/venvs/gemma4-harness`, Python 3.12.3, pip 26.2.1, run from `/tmp`.
+- Resolver dry run (`pip install --dry-run "cachetools>=5.0.0" "networkx>=3.0"`): would install only `cachetools-7.2.0` and `networkx-3.7`, with no upgrade, downgrade or removal and no extra package.
+- Install command: `pip install "cachetools>=5.0.0" "networkx>=3.0"`. Result: `cachetools 7.2.0` and `networkx 3.7` installed. **No additional dependency was installed.** The `pip freeze` difference is exactly those two lines.
+- Pinned harness packages unchanged: `swegemma` 0.2.7, `adk-submission` 0.2.11, `adk-eval-core` 0.1.0, `google-adk` 1.36.1, `google-genai` 2.11.0.
+- Import verification: `cachetools` 7.2.0 and `networkx` 3.7 import, and `swegemma.graph.graph_utils`, `swegemma.graph.retrieval_utils`, `swegemma.graph.embedding_utils` and `swegemma.tools.graph` all import.
+- **Sorted `pip freeze` SHA-256 (evidence only, not the dependency specification):**
+  - old (65 lines): `220dd9067a7d540ddb6bd923c5e90b380c7be1712a1dcbd7dd78a07ba18c8bc4`
+  - new (67 lines): `230b3b5fcf75222666413c3dac9c013a8111f0bbba3ebf4e613645f6af571c40`
+
+*Remaining `python -m pip check` findings (diagnostic only, not repaired, exit 1, 45 lines):* no `cachetools` or `networkx` complaint remains. What remains, classified:
+- **Declared but deliberately excluded** (Milestone 1 omitted the torch stack on purpose): `swegemma` requires `accelerate`, `safetensors`, `torchvision`, `transformers`.
+- **Declared but unexercised** (the agent ran end to end without them): `google-adk` requires `aiosqlite`, `google-api-python-client`, `google-cloud-aiplatform`, `google-cloud-bigquery`, `google-cloud-bigquery-storage`, `google-cloud-bigtable`, `google-cloud-dataplex`, `google-cloud-discoveryengine`, `google-cloud-pubsub`, `google-cloud-secret-manager`, `google-cloud-spanner`, `google-cloud-speech`, `graphviz`, `jsonschema`, `mcp`, `opentelemetry-exporter-gcp-logging`, `-gcp-monitoring`, `-gcp-trace`, `opentelemetry-exporter-otlp-proto-http`, `opentelemetry-resourcedetector-gcp`, `opentelemetry-sdk`, `pyarrow`, `sqlalchemy`, `sqlalchemy-spanner`, `tzlocal`, `uvicorn`, `watchdog`; `rich` 15.0.0 requires `markdown-it-py` and `pygments`; `requests` requires `charset-normalizer` (the harness prints a `RequestsDependencyWarning` about it).
+- **Unrelated or transitive:** `importlib-metadata` (`zipp`), `google-auth` (`pyasn1-modules`), `cffi` (`pycparser`), `google-cloud-storage` (`google-crc32c`, `google-resumable-media`), `openai` (`tqdm`), `tiktoken` (`regex`), `tokenizers` (`huggingface-hub`), `google-api-core` (`proto-plus`), `litellm` (`boto3`, `jsonschema`).
+- **Uncertain:** whether any of the above matters on an exercised path. None was shown to.
+
+**Interpretation:** the two graph-tool import gaps are closed, and OpenClaw no longer starts by itself. The graph tools have not been run, so whether they now work end to end is untested.
+
+**VERIFIED**
+- OpenClaw was auto-starting, is now stopped and disabled, and is still installed.
+- `cachetools` 7.2.0 and `networkx` 3.7 installed, with no extra package and no change to the pinned harness packages.
+- The four `swegemma` graph modules import.
+
+**PARTIAL**
+- The remaining `pip check` findings were classified from evidence of what ran, not proven irrelevant.
+
+**UNPROVEN**
+- That the graph and search tools work end to end (the no-model smoke test is the next step).
+- That other tools are not affected by the remaining gaps.

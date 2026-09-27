@@ -257,3 +257,8 @@ Baseline r1 attempt 1 (`results/m2_baseline_r1/`) is **INVALID and diagnostic on
 5. Only after steps 1 to 4 succeed, start `m2_baseline_v2_r1`.
 
 The pre-run checklist (section 9) and the cache procedure (section 3) apply to each step that runs the harness.
+
+**11.6 Recorded corrective environment (approved and applied).** Evidence is in [EXPERIMENTS.md](EXPERIMENTS.md).
+- **Approved host dependency repair, exactly two packages:** `cachetools` **7.2.0** and `networkx` **3.7**, installed into the harness venv (`/home/jesse/venvs/gemma4-harness`) with `pip install "cachetools>=5.0.0" "networkx>=3.0"`. No other package was added or changed, and the pinned packages in section 4 are unchanged. The sorted `pip freeze` fingerprint is now `230b3b5fcf75222666413c3dac9c013a8111f0bbba3ebf4e613645f6af571c40` (previously `220dd906…c8bc4`), as evidence only. The remaining `pip check` findings are recorded, classified and deliberately not repaired.
+- **OpenClaw** is an unrelated workload. Its systemd user service `openclaw-gateway.service` had been starting automatically with WSL. Automatic start is **disabled**, and it is now manual-start only (`systemctl --user start openclaw-gateway.service`, `systemctl --user stop openclaw-gateway.service`). It remains installed, and it **must remain stopped for measured runs and dry runs**. Check `systemctl --user is-active openclaw-gateway.service` in the quiet-host step (11.2).
+- The validation sequence in 11.5 continues from step 3 (the no-model graph-tool smoke test).
