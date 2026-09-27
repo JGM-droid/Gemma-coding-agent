@@ -527,3 +527,58 @@ The helper scripts (a gate wrapper and an import-path probe) were temporary and 
 **UNPROVEN**
 - Whether the `test_markdown.py` failures would also occur with the gold fix (no gold-patch grader).
 - What makes `rich_3772` hang.
+
+---
+
+### Experiment: Milestone 2 baseline r1, attempt 1 (INVALID, diagnostic only)
+
+**Goal:** the first measured baseline repeat (r1) over the 8 frozen Rich tasks, per [EVALUATION.md](EVALUATION.md).
+
+**Result:** **INVALID as baseline data.** The raw score of 1/8 resolved must not enter any x/3 tally, and is not a baseline result. An Opus 5.5 Medium audit concluded: invalidate and repeat r1.
+
+**Why it is invalid:** the pinned `swegemma` 0.2.7 host installation is missing `cachetools`. The audit reports that the package metadata declares `cachetools>=5.0.0` as an unconditional requirement (recorded from the audit; not re-checked in the work item that wrote this record). During r1, graph and search tools failed with `SimilaritySearchError: No module named 'cachetools'` in 7 of the 8 tasks. The eighth, `rich_3894`, did not call them. The frozen plan describes the unmodified `sample_submission` with graph and embedding tools included, so r1 did not measure the intended frozen agent. This is classified as an incomplete host harness installation. The dry run did not reveal it because it used no graph tool.
+
+**Method:** the frozen r1 command from [EVALUATION.md](EVALUATION.md) (8 tasks, budgets 30 tool calls, 20 minutes and 300 s, `--max-turns` omitted, concurrency 1), results directory `results/m2_baseline_r1/`, run detached. The cache was cleared first and the existing `gemma4-e4b-server` container (already running since the dry run) was used.
+
+**Evidence:**
+- **Repository:** HEAD `66288d6`, clean working tree, before and after.
+- **Environment:** the wheel pool fingerprint was unchanged (`e02d3059f9c04716d0b6e46d90364a5370e45385b284ab8c1c56a9c0d63aba60`), and the cache fingerprint was unchanged (`c52a777befd2b12c719eb6363c547a82f3fe1c8e1f5821d72beea3a4e612bc47`). The server had 0 restarts and no out-of-memory flag.
+- **Raw completed result (diagnostic only):** 1/8 resolved, `rich_3905`. The harness executed the tasks in `tasks.jsonl` order.
+
+| Task | Outcome | Notes |
+|---|---|---|
+| `rich_4079` | NOT RESOLVED | `ContextWindowExceededError`: request 34,722 tokens against the 32,768-token context, no Phase 2 verification. **Classification: context-budget failure** (not infrastructure). |
+| `rich_4076` | NOT RESOLVED | Phase 2 exit 2, patch 51,170 bytes |
+| `rich_3894` | NOT RESOLVED | Phase 2 exit 1 |
+| `rich_3905` | RESOLVED | Phase 2 exit 0. Diagnostic only, not baseline credit. |
+| `rich_3470` | NOT RESOLVED | all 30 tool calls used, Phase 2 exit 1 |
+| `rich_3278` | NOT RESOLVED | `submit_patch` called twice, final recorded patch empty, Phase 2 exit 1 |
+| `rich_3130` | NOT RESOLVED | Phase 2 exit 1 |
+| `rich_3061` | NOT RESOLVED | only 2 LLM calls and 2 tool calls before a host stall, final wall time 4,861.89 s, "Agent exceeded session timeout (20.0 min)". **Classification: infrastructure failure** (WSL and Docker became unresponsive under severe memory pressure). |
+
+- **Batch totals:** 105 counted tool calls, 128 LLM calls, 1,512,078 prompt tokens, 46,185 completion tokens, 5,797.6 s summed task time.
+- **Resources:** peak VRAM 5,777 MiB. WSL RAM reached about 7,830 MiB of about 7.9 GiB, and swap reached its 2,048 MiB limit. The resource logger lost WSL access during the stall, so its record is incomplete.
+- **Observed memory consumers after recovery** (not proven to be the cause): the Gemma model server about 4.4 GiB, an unrelated `openclaw` Node process about 1.3 GB, and unrelated `repotriage` containers about 0.2 GB.
+- **First-launch anomaly:** an earlier launch of r1 was stopped seconds after it started, because of the interactive execution time limit. One LLM call occurred and no task completed. The partial results directory and console log were deleted, and the cache was cleared before the later full launch. That deletion cannot be undone, and it was contrary to the evidence-preservation rule adopted afterwards (see [EVALUATION.md](EVALUATION.md), Amendment 1). The deleted artifacts cannot be recovered. Future aborted attempts are preserved. This does not by itself invalidate the later run.
+- **Artifacts of the completed invalid attempt** (local, ignored): `results/m2_baseline_r1/`, `results/m2_baseline_r1_console.log` and `results/m2_baseline_r1_resources.log`. **They must remain untouched and must never be overwritten.** SHA-256 recorded from the Windows-visible files:
+  - `results/m2_baseline_r1/summary.json`: `f05158a9504a73e9f63c0f2cd3d896b9c8a172d7a81c5f5c4a28bdf8242b7f79`
+  - `results/m2_baseline_r1/task_results.jsonl`: `0b7d7abd4d4bd0af357f37ef68a5f61a5e360a2d03edc95516d75a72f83639ce`
+
+**Interpretation:** the run is useful only as diagnostic evidence about the environment (missing dependency, memory pressure, context budget). It says nothing about the frozen agent's baseline pass rate. Nothing was tuned in response.
+
+**Limitations:** `cachetools` is not installed as of this record, and no corrective action has been taken. Other dependency gaps may exist. Which unrelated processes caused the memory pressure is not proven, and the WSL and sandbox memory limits are unchanged.
+
+**VERIFIED**
+- r1 attempt 1 ran to completion with 8 task results, of which 1 was resolved.
+- The wheel pool and cache fingerprints were unchanged, and the working tree was clean.
+- `SimilaritySearchError: No module named 'cachetools'` occurred on graph and search tools in 7 of 8 tasks.
+- `rich_4079` exceeded the frozen context (34,722 against 32,768 tokens) and had no Phase 2 verification.
+- `rich_3061` ran for 4,861.89 s (about 81 minutes) after only 2 LLM calls, while WSL and Docker were unresponsive.
+
+**PARTIAL**
+- The resource log covers only part of the batch.
+
+**UNPROVEN**
+- That `cachetools>=5.0.0` is an unconditional dependency of `swegemma` 0.2.7 (reported by the audit, not re-checked here).
+- Whether other declared dependencies are missing (a diagnostic `pip check` is pending).
+- What consumed the WSL memory.

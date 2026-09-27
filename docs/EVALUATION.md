@@ -44,7 +44,7 @@ The canonical environment is the complete, unmodified official wheel pool, plus 
 **Rules**
 - No wheel may be added, removed or replaced during the baseline.
 - No dependency may be installed from the internet.
-- No harness, `setup.py`, Dockerfile, sandbox image or `sample_submission` modification is allowed.
+- No harness, `setup.py`, Dockerfile, sandbox image or `sample_submission` modification is allowed. (Restoring a required dependency of the pinned host harness under Amendment 1, section 11, does not modify harness source and is the only permitted host correction.)
 - Any wheel-pool change creates a different environment and invalidates comparability with this baseline.
 
 **Pool fingerprint.** SHA-256 of the UTF-8 lines `filename size sha256` (one per wheel, sorted by filename, joined with newlines, no trailing newline):
@@ -122,7 +122,7 @@ The baseline preserves this observed behavior exactly as-is. The dry run reveale
 - **24 measured agent runs:** 8 tasks × 3 repeats (r1, r2, r3), one `swegemma eval` command per repeat over all 8 tasks, run sequentially at concurrency 1.
 - **Execution order:** the harness filters `--task-ids` against `tasks.jsonl` and runs the tasks in `tasks.jsonl` order, not the order given on the command line. For the frozen set that order is `rich_4079`, `rich_4076`, `rich_3894`, `rich_3905`, `rich_3470`, `rich_3278`, `rich_3130`, `rich_3061` (VERIFIED from `evaluate.py` and `tasks.jsonl`). The ranking in section 1 is the selection order only.
 - **One server per repeat**, with no restarts between tasks. Check the server logs for unplanned restarts. Keep a background VRAM/RAM log during each repeat.
-- **Unique result directories, never overwritten:** `results/m2_baseline_r1/`, `results/m2_baseline_r2/`, `results/m2_baseline_r3/`.
+- **Unique result directories, never overwritten:** `results/m2_baseline_r1/`, `results/m2_baseline_r2/`, `results/m2_baseline_r3/`. **Amendment 1:** `results/m2_baseline_r1/` (attempt 1) is INVALID and diagnostic only (see section 11). Repeated baseline attempts use the versioned namespace `results/m2_baseline_v2_r1/`, `results/m2_baseline_v2_r2/`, `results/m2_baseline_v2_r3/`.
 
 Command for repeat N (WSL, from the repository root, after the pre-run checklist):
 
@@ -163,7 +163,7 @@ For each of the 24 runs, record in [EXPERIMENTS.md](EXPERIMENTS.md):
 
 **Failure category**, assigned in this order of precedence: infra error, then no `submit_patch`, then empty patch, then patch not applied, then Phase 2 tests failed or errored.
 
-**Rerun rule.** A genuine infrastructure failure (OOM, container crash, server crash) may be rerun **once**, and both attempts are recorded. A model failure is **never** rerun, and none is rerun silently.
+**Rerun rule.** A genuine infrastructure failure (OOM, container crash, server crash) may be rerun **once**, and both attempts are recorded. A model failure is **never** rerun, and none is rerun silently. Amendment 1 (section 11) defines what counts as infrastructure failure and as a context-budget failure.
 
 ## 7. Reporting and comparison rule
 
@@ -208,6 +208,7 @@ Before the dry run and before each of r1, r2 and r3:
 - [ ] the budgets are 30 tool calls, 20 minutes and 300 seconds, with `--max-turns` omitted
 - [ ] `--concurrency 1`
 - [ ] the result directory is new and unique
+- [ ] the Amendment 1 preconditions (section 11) are met: dependency integrity, quiet host, and the corrective validation sequence
 - [ ] no unapproved environment change (no installs, no wheel changes, no harness, Dockerfile or `setup.py` edits)
 
 **Stop and report** if any check fails, if the cache fingerprint mismatches, if the pool fingerprint changes, if the repository changes, or if a spend above $0 would occur.
@@ -222,3 +223,37 @@ Before the dry run and before each of r1, r2 and r3:
 - No gold-patch grader is used, so a task may fail for reasons the gate cannot detect.
 - Some Rich tests may still be environment-sensitive (for example the markdown tests in `rich_3130` and `rich_4079`), and `rich_3061` includes one `AttributeError` for a method the fix adds.
 - The results measure this frozen local development profile only. They are not a competition score, and official Kaggle scoring may not behave identically.
+
+## 11. Amendment 1 (after r1 attempt 1 was invalidated)
+
+Baseline r1 attempt 1 (`results/m2_baseline_r1/`) is **INVALID and diagnostic only**. Its host harness installation was missing `cachetools`, so the graph and search tools failed and the intended frozen agent was not measured. Its raw 1/8 result must not enter any x/3 tally. Evidence is in [EXPERIMENTS.md](EXPERIMENTS.md). This amendment records the approved corrective procedure only. **It does not itself authorize any installation.** The dev set, eligibility results, wheel pool, cache construction, model, prompts, sampling, budgets (30 tool calls, 20 minutes, 300 s), context window (32,768), comparison rule, harness version pins, sandbox image and `dev_models.yaml` are all unchanged.
+
+**11.1 Harness dependency integrity.** Before any model run:
+- The pinned host harness environment (`swegemma` 0.2.7 and the other pins in section 4) must satisfy the required dependencies its packages declare.
+- `pip check` is used diagnostically. Each reported gap is reviewed individually. No blanket installation of every reported package is authorized.
+- The exact corrective package versions are recorded.
+- A reproducibility fingerprint of the resulting host environment is recorded.
+- The official pinned harness packages remain authoritative. A full environment freeze and fingerprint is evidence, not the primary dependency specification.
+
+**11.2 Quiet host.** Before dry runs and measured batches:
+- Unrelated containers and processes that materially consume WSL RAM must not be running. Stopping the unrelated `openclaw` process and the unrelated `repotriage` containers before measurement is explicitly permitted. They are not part of the benchmark configuration.
+- Record `free -m`, `docker ps`, and the model-server state (container status, start time, restart count).
+- WSL memory limits and sandbox memory limits are **not** changed at this stage. They are first retested under a quiet host.
+
+**11.3 Failure taxonomy additions.**
+- A context-window overflow (a request exceeding the frozen 32,768-token context) is a **context-budget failure**. It is not, by itself, an infrastructure rerun condition.
+- **Infrastructure failure** includes WSL or Docker unresponsiveness, daemon errors, and equivalent host failure. Wall time far beyond `--max-time-minutes` because of a host freeze may support an infrastructure classification.
+- A missing declared dependency of the pinned harness is an incomplete host installation. It invalidates the affected batch (as for r1 attempt 1), and is not a model failure.
+
+**11.4 Evidence preservation.**
+- Invalid, aborted and infrastructure-failed attempts are preserved. Their result directories are never overwritten, and partial artifacts are never silently deleted.
+- Repeated baseline attempts use a new versioned namespace: `results/m2_baseline_v2_r1/`, `results/m2_baseline_v2_r2/`, `results/m2_baseline_v2_r3/`.
+
+**11.5 Corrective validation sequence.** Before any new baseline measurement:
+1. Restore only the reviewed, required host dependency gaps (11.1).
+2. Verify dependency integrity.
+3. Run a no-model graph-tool smoke test.
+4. Run a new dry run on `rich_3894` (results outside the baseline namespace, not counted).
+5. Only after steps 1 to 4 succeed, start `m2_baseline_v2_r1`.
+
+The pre-run checklist (section 9) and the cache procedure (section 3) apply to each step that runs the harness.
