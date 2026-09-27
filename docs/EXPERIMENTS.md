@@ -642,3 +642,43 @@ The helper scripts (a gate wrapper and an import-path probe) were temporary and 
 **UNPROVEN**
 - That the graph and search tools work end to end (the no-model smoke test is the next step).
 - That other tools are not affected by the remaining gaps.
+
+---
+
+### Experiment: Milestone 2 no-model graph-tool smoke test (Amendment 1, step 3)
+
+**Goal:** show that the graph and search tools that failed in r1 attempt 1 (`No module named 'cachetools'`) now initialise and complete a small representative operation, with no model involved.
+
+**Result:** PASS. No model was run, the model server stayed stopped, no task was solved, no patch was generated or applied, no benchmark result was produced, and no coding-performance result was measured.
+
+**Material used:** the already-known dev task `rich_3894` (repo `Textualize/rich`, base commit `4d6d631a3d2deddf8405522d4b8c976a6d35726c`), read-only from `kaggle_data/tasks.jsonl`, `kaggle_data/graphs/rich_4d6d631a….json` and `kaggle_data/embeddings/rich_4d6d631a….npz`. No held-out task was read, and the repository snapshot was not touched.
+
+**Precondition (VERIFIED):** branch `main`, HEAD `4428c79`, clean tree. WSL responsive, `uptime` 25 min. `docker ps` empty. `openclaw-gateway.service` inactive and disabled. Before: RAM 1,543 MiB used and 6,366 MiB available, swap 0 of 2,048 used.
+
+**Dependency versions** (harness venv `/home/jesse/venvs/gemma4-harness`, run from `/tmp`): `cachetools` 7.2.0, `networkx` 3.7. `swegemma.graph.graph_utils`, `swegemma.graph.retrieval_utils`, `swegemma.graph.embedding_utils` and `swegemma.tools.graph` all import.
+
+**Invocation.** A throwaway script (kept outside the repository, not committed) called the installed `swegemma.tools.graph` functions directly, the same code path the agent's tools use, with a stub context (`task` = `{instance_id, repo, base_commit}` for `rich_3894`, `graph_dir` = `kaggle_data/graphs`, `embeddings_dir` = `kaggle_data/embeddings`, budget check always allowing):
+1. `get_code_subgraph(ctx, [])`, an initial probe. It returned `SubgraphExtractionError: subset_nodes cannot be empty.` This is the tool rejecting an empty input, not a dependency fault, and it was not the intended initialisation check. The graph was then loaded directly in step 2.
+2. `swegemma.graph.get_graph(repo_name="rich_4d6d631a…", …)`: initialised. 1,986 nodes, 5,680 edges, all 1,986 nodes hydrated with embeddings.
+3. `get_code_neighbors(ctx, "rich.text.Text", None, 10)`: `status ok`, 10 neighbors.
+4. `search_similar_code(ctx, "rich.text.Text", 5)`: `status ok`, 5 results, each with `node_name`, `code`, `similarity`.
+5. `get_code_subgraph(ctx, <first 5 nodes>)`: `status ok`, 5 nodes, 8 edges.
+
+Result counts and shapes only. Relevance was not judged and is not model-quality evidence.
+
+**Timing and resources:** the graph operations took 0.91 s, and the whole process 6.5 s wall time including imports. Peak process RSS was 343 MB. After: RAM 1,545 MiB used and 6,364 MiB available, swap 0 used. The host stayed responsive.
+
+**Warnings:** `RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer)`. It comes from `requests`, is the known `charset-normalizer` gap already recorded above, and did not affect the graph path. Two `ResourceWarning` lines came from the throwaway script (an unclosed file handle) and are not harness warnings. No `ModuleNotFoundError`, no `SimilaritySearchError` and no crash occurred.
+
+**Post-test state (VERIFIED):** `docker ps` empty (Gemma server stopped), OpenClaw inactive and disabled, repository clean before this record, `results/m2_baseline_r1/` and its logs untouched, no `m2_baseline_v2_*` directory exists.
+
+**VERIFIED**
+- The graph and search tool path (`get_code_neighbors`, `search_similar_code`, `get_code_subgraph`) initialises and completes on `rich_3894` materials with `cachetools` 7.2.0 and `networkx` 3.7, with no missing-dependency error.
+
+**PARTIAL**
+- Only one repository's graph (`rich_3894`) and three tools were exercised, called directly rather than through the agent loop, with a stub context.
+
+**UNPROVEN**
+- That the tools behave the same inside a full agent run (the new dry run is the next step).
+- That other tools are unaffected by the remaining `pip check` gaps.
+- Nothing about model or agent quality.
