@@ -682,3 +682,54 @@ Result counts and shapes only. Relevance was not judged and is not model-quality
 - That the tools behave the same inside a full agent run (the new dry run is the next step).
 - That other tools are unaffected by the remaining `pip check` gaps.
 - Nothing about model or agent quality.
+
+---
+
+### Experiment: Milestone 2 corrective dry run on `rich_3894` (Amendment 1 §11.5, step 4)
+
+**Goal:** exercise the REAL `swegemma` agent/evaluation path (harness → ADK runner → model → tools → workspace → verification → results) on `rich_3894`, through the repaired environment, to confirm the run reaches actual agent/model behaviour rather than failing on an ordinary missing prerequisite. This is a diagnostic dry run, **not** a baseline run, and its result is not counted toward Milestone 2 performance.
+
+**Result:** run completed cleanly end to end. `resolved=false` (model failure, Phase 2 tests failed), no infrastructure error, no dependency error. This is expected diagnostic behaviour, not a measured baseline outcome.
+
+**Precondition (VERIFIED):** branch `main`, HEAD `19091bb`, working tree clean, synced with `origin/main`, before and after. Pool fingerprint recomputed and confirmed unchanged (`e02d3059f9c0…aba60`, 124 files). Harness cache absent before the run (expected: cleared per the run procedure). OpenClaw inactive and disabled. `docker ps` empty. Port 8080 free. GPU: RTX 3070, 8,192 MiB, ~1.5–1.6 GiB used by unrelated processes. RAM before: 1,705 MiB used, 6,204 MiB available; swap 0/2,048. Disk: 946 GB free. `cachetools` 7.2.0 and `networkx` 3.7 confirmed importable from the exact harness venv (`/home/jesse/venvs/gemma4-harness`) that executed `swegemma eval`.
+
+**Result namespace:** `results/m2_dryrun_v2/` (console log `results/m2_dryrun_v2_console.log`), an unmistakably non-baseline name distinct from both the original `results/m2_dryrun/` (pre-corrective) and any `m2_baseline_v2_*` namespace. Neither `results/m2_dryrun/`, `results/m2_baseline_r1/` nor any `m2_baseline_v2_*` path was written to, read from destructively, or overwritten.
+
+**Cache.** `/tmp/swegemma_sp_cache_v8/` confirmed absent, then `rm -rf` run explicitly (no-op, already absent) before starting the eval. The run rebuilt it from the frozen wheel pool; after the first task's setup, the cache fingerprint was recomputed and matched the frozen value exactly: `c52a777befd2b12c719eb6363c547a82f3fe1c8e1f5821d72beea3a4e612bc47`.
+
+**Server.** Started with the exact frozen command from [EVALUATION.md](EVALUATION.md) §4 (`docker start gemma4-e4b-server`, an existing container built from the pinned digest `ghcr.io/ggml-org/llama.cpp:server-cuda12@sha256:1f4b9cf58982…60ab6`). `GET /v1/models` answered within 1 s with `gemma-4-e4b-it`, context 32,768, `Q4_0`. `RestartCount` 0, `OOMKilled` false. GPU used rose to about 4.95–4.99 GiB, consistent with prior runs. The server was stopped (`docker stop`) after the run, restoring the quiet-host baseline; the container and image were not removed or modified.
+
+**Invocation:** the frozen r-repeat command from EVALUATION.md §5, restricted to one task and pointed at the new namespace:
+```bash
+swegemma eval --tasks kaggle_data/tasks.jsonl --snapshots-dir kaggle_data/snapshots \
+  --submission-dir kaggle_data/sample_submission --results-dir results/m2_dryrun_v2 \
+  --image swebench-sandbox:latest --sandbox docker --models-yaml /home/jesse/gemma4-dev/dev_models.yaml \
+  --task-ids rich_3894 \
+  --max-tool-calls 30 --max-time-minutes 20 --timeout-seconds 300 \
+  --concurrency 1 --display single --verbose
+```
+
+**Agent transcript (factual, not a quality judgment):** the agent found `rich/_inspect.py` (`run_command find`), read it (`read_file`), edited it (`edit_file`, 1 occurrence), ran `pytest tests/test_inspect.py` twice (both times other, unrelated assertions failed — the agent itself judged them unrelated to its fix), then called `submit_patch` (668 bytes, 1 file changed, `status: ok`), and finished with a natural-language summary. **The graph/search tools (`get_code_neighbors`, `search_similar_code`, `get_code_subgraph`) were available to both the root agent and the `code_analyzer` sub-agent (registered in `agent.yaml` and `sub_agents/code_analyzer.yaml`) but were not invoked by the model this run** — this was the model's own choice, not a tool failure, so this run does not directly demonstrate the graph tools succeeding inside the live agent loop (only the standalone smoke test recorded above does that).
+
+**Harness result** (`results/m2_dryrun_v2/summary.json`, `task_results.jsonl`): `resolved=false`, `agent_patch_size=668`, `test_exit_code=1`, `tool_calls=5`, `total_llm_calls=7`, `duration_seconds=67.96`, `error=null`. Total 0/1 resolved.
+
+**Warnings/errors:** only the known, harmless `RequestsDependencyWarning` about `charset_normalizer`. No `ModuleNotFoundError`, no `SimilaritySearchError`, no `Traceback`, no budget-exceeded message, no crash.
+
+**Post-run state:** `docker ps` empty after stopping the server, OpenClaw inactive and disabled, repository clean, no baseline namespace touched. RAM after: 2,491 MiB used, 5,418 MiB available; swap rose to 5/2,048 MiB (consistent with a completed Docker Phase 2 verification and buffered container I/O, not exhaustion). GPU used 4,987 MiB right after the run (server still up at that point, before being stopped).
+
+**Limitation, recorded honestly:** the intended continuous RAM/swap/GPU background logger (10 s interval) died when its WSL invocation ended, because it was started with `nohup … &` but not `disown`ed in that shell session — an operator error, not an infrastructure or dependency fault. No per-interval resource trace exists for the run's interior; only point-in-time RAM/swap/GPU readings before and immediately after are available (above), plus the Docker `RestartCount`/`OOMKilled` evidence. The run completed in 68 seconds, well under any budget, and the host remained responsive throughout (confirmed by the still-running monitor and successful result-file writes), so this gap does not put the PASS classification below in doubt, but it is a real coverage gap for anyone auditing the fine-grained resource curve.
+
+**VERIFIED**
+- The real agent/harness path (harness → ADK `Runner`/`agent_tool` → LiteLlm model client → tools → Docker sandbox verification → result writing) runs to completion on `rich_3894` with the repaired dependencies, with no missing-prerequisite failure.
+- `cachetools` 7.2.0 and `networkx` 3.7 are visible to the exact process that ran the eval.
+- Both fingerprints (pool and rebuilt cache) match their frozen values.
+- The model server, sandbox image and harness versions match their pins exactly.
+- No infrastructure error, dependency error, crash, or budget breach occurred. The model failure (unresolved patch) is an ordinary model-quality outcome, not an environment defect.
+
+**PARTIAL**
+- The graph/search tools were not exercised inside this particular live agent run (the model didn't call them); their live-loop behaviour still rests only on the earlier stub-context smoke test plus the fact that they are correctly registered as tools for both agents.
+- The continuous resource log is missing for the run's interior, for the operator-error reason stated above; only pre/post point readings and Docker's own restart/OOM flags are available.
+
+**UNPROVEN**
+- General coding performance or competition-relevant conclusions. This is one non-counted diagnostic task, explicitly excluded from any x/3 tally.
+- Whether the graph tools would behave identically inside the live loop if a task caused the model to actually call them (no task has yet forced that in this repaired environment).
