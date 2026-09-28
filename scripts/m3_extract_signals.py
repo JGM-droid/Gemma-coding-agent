@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Milestone 3 WI-3.2: deterministic signal extractor.
+"""Milestone 3 WI-3.2/WI-3.5a: deterministic signal extractor.
 
 Reads the 24 counted Milestone 2 baseline runs (results/m2_baseline_v2_r1/,
 _r2/, _r3/ — 8 frozen dev tasks each) and the frozen task definitions
@@ -23,6 +23,21 @@ under results/.
 Invalid/dry-run result directories (results/m2_baseline_r1/,
 results/m2_dryrun/, results/m2_dryrun_v2/, results/m2_post_baseline_control/)
 are never read by this script; only the three counted repeats are used.
+
+WI-3.5a (schema v2, additive only): each frozen trace step records its
+own `extra.author` (e.g. "swe_baseline_agent" for the root agent,
+"code_analyzer_agent" for the sub-agent invoked via that tool). The v1
+schema's `prompt_tokens_by_step`/`max_recorded_prompt_tokens` fields mix
+root-agent and sub-agent prompt-token series together, which understates
+the root agent's own actual context growth (the sub-agent's context is a
+separate, shorter-lived conversation). v2 adds root-only and sub-only
+prompt-token series and derived fields alongside the unchanged v1 fields,
+so root-agent context growth can be examined on its own. Every v1 field
+keeps its exact name, shape and value; v2 only adds new fields and bumps
+the top-level "schema" string from "m3_signal_extraction_v1" to
+"m3_signal_extraction_v2". The extractor fails loudly if any trace step
+carrying `metrics.prompt_tokens` lacks `extra.author`, since that author
+tag is required to assign the step to the root-agent or sub-agent series.
 
 Usage:
     python3 scripts/m3_extract_signals.py [-o OUTPUT.json]
@@ -68,6 +83,29 @@ FILE_WRITE_TOOLS = ("edit_file", "write_file")
 COMPETITION_TOOL_CALL_THRESHOLD = 10
 
 _CONTEXT_TOKEN_RE = re.compile(r"request \((\d+) tokens\) exceeds")
+
+# WI-3.5a (schema v2): the root agent's own author tag, per the frozen
+# trace's `extra.author` field. Any other author on a prompt-token-bearing
+# step is treated as a sub-agent (e.g. "code_analyzer_agent").
+ROOT_AGENT_AUTHOR = "swe_baseline_agent"
+
+# WI-3.5a (schema v2): the token-context threshold used to locate the
+# first root-agent step whose prompt-token count exceeds it (see
+# `root_prompt_tokens_first_step_above_14336`). This is the
+# `token_threshold` value from the host reference path's
+# EventsCompactionConfig, per the 2026-09-28 audit (S4, transcribed, not
+# re-retrieved this work item) — recorded here only as a fixed reference
+# point for comparison, not as a claim that compaction was configured for
+# the Milestone 2 runs (it was not; see WI-3.5a's EXPERIMENTS.md entry).
+ROOT_PROMPT_TOKEN_REFERENCE_THRESHOLD = 14336
+
+# WI-3.5a (schema v2): the only tool-call argument keys retained in
+# `largest_root_prompt_increase.from_step_tool_args_subset`, to keep that
+# field small and avoid echoing large argument payloads (e.g. full
+# `new_string`/`old_string` edit bodies) into the extracted signal file.
+ALLOWED_TOOL_ARG_KEYS = frozenset(
+    {"filepath", "start_line", "end_line", "command", "query", "request"}
+)
 
 
 class ExtractorError(RuntimeError):
@@ -247,6 +285,111 @@ def extract_run(
         max(r["prompt_tokens"] for r in prompt_tokens_by_step) if prompt_tokens_by_step else None
     )
 
+    # WI-3.5a (schema v2) — split the same prompt-token-bearing steps by
+    # `extra.author` into root-agent vs. sub-agent series. Fails loudly
+    # (does not silently default) if a prompt-token-bearing step has no
+    # recorded author, since the split cannot be made without it.
+    root_step_records: list[tuple[int, int, dict[str, Any]]] = []  # (step_id, prompt_tokens, step)
+    sub_agent_prompt_tokens_by_step: list[dict[str, Any]] = []
+    steps_with_prompt_tokens = 0
+    steps_missing_author = 0
+    for step in trace.get("steps", []):
+        metrics = step.get("metrics")
+        if not (isinstance(metrics, dict) and "prompt_tokens" in metrics):
+            continue
+        steps_with_prompt_tokens += 1
+        extra = step.get("extra")
+        author = extra.get("author") if isinstance(extra, dict) else None
+        if not author:
+            steps_missing_author += 1
+            _fail(
+                f"{repeat}/{task_id}: trace step_id={step.get('step_id')} has "
+                f"metrics.prompt_tokens but no extra.author; cannot assign it to the "
+                f"root-agent or sub-agent series"
+            )
+        if author == ROOT_AGENT_AUTHOR:
+            root_step_records.append((step.get("step_id"), metrics["prompt_tokens"], step))
+        else:
+            sub_agent_prompt_tokens_by_step.append(
+                {"step_id": step.get("step_id"), "author": author, "prompt_tokens": metrics["prompt_tokens"]}
+            )
+    root_step_records.sort(key=lambda r: r[0])
+    sub_agent_prompt_tokens_by_step.sort(key=lambda r: r["step_id"])
+
+    root_agent_prompt_tokens_by_step = [
+        {"step_id": sid, "prompt_tokens": pt} for (sid, pt, _step) in root_step_records
+    ]
+    max_root_agent_prompt_tokens = max((pt for (_sid, pt, _s) in root_step_records), default=None)
+    last_root_agent_prompt_tokens = root_step_records[-1][1] if root_step_records else None
+    max_sub_agent_prompt_tokens = (
+        max(r["prompt_tokens"] for r in sub_agent_prompt_tokens_by_step)
+        if sub_agent_prompt_tokens_by_step
+        else None
+    )
+    last_sub_agent_prompt_tokens = (
+        sub_agent_prompt_tokens_by_step[-1]["prompt_tokens"] if sub_agent_prompt_tokens_by_step else None
+    )
+    sub_agent_step_count = len(sub_agent_prompt_tokens_by_step)
+
+    sub_agent_invocation_count = 0
+    for step in trace.get("steps", []):
+        extra = step.get("extra")
+        author = extra.get("author") if isinstance(extra, dict) else None
+        if author != ROOT_AGENT_AUTHOR:
+            continue
+        for call in step.get("tool_calls") or []:
+            if call.get("function_name") == "code_analyzer_agent":
+                sub_agent_invocation_count += 1
+
+    root_prompt_values = [pt for (_sid, pt, _s) in root_step_records]
+    root_prompt_tokens_nondecreasing = all(
+        b >= a for a, b in zip(root_prompt_values, root_prompt_values[1:])
+    )
+
+    root_prompt_tokens_first_step_above_14336 = None
+    for sid, pt, _s in root_step_records:
+        if pt > ROOT_PROMPT_TOKEN_REFERENCE_THRESHOLD:
+            root_prompt_tokens_first_step_above_14336 = sid
+            break
+
+    largest_root_prompt_increase = None
+    best_increase = None
+    for (from_sid, from_pt, from_step), (to_sid, to_pt, _to_step) in zip(
+        root_step_records, root_step_records[1:]
+    ):
+        increase = to_pt - from_pt
+        if best_increase is None or increase > best_increase:
+            best_increase = increase
+            from_metrics = from_step.get("metrics") or {}
+            from_tool_calls = from_step.get("tool_calls") or []
+            from_step_tool_names = [c.get("function_name") for c in from_tool_calls]
+            args_subset: dict[str, Any] = {}
+            for c in from_tool_calls:
+                call_args = c.get("arguments")
+                if isinstance(call_args, dict):
+                    for k, v in call_args.items():
+                        if k in ALLOWED_TOOL_ARG_KEYS:
+                            args_subset[k] = v
+            from_obs = from_step.get("observation")
+            from_content = from_obs.get("content") if isinstance(from_obs, dict) else None
+            from_step_observation_content_chars = (
+                len(from_content) if isinstance(from_content, str) else None
+            )
+            largest_root_prompt_increase = {
+                "from_step_id": from_sid,
+                "to_step_id": to_sid,
+                "increase": increase,
+                "from_step_completion_tokens": from_metrics.get("completion_tokens"),
+                "from_step_tool_names": from_step_tool_names,
+                "from_step_tool_args_subset": args_subset,
+                "from_step_observation_content_chars": from_step_observation_content_chars,
+            }
+
+    prompt_token_author_coverage = {
+        "steps_with_prompt_tokens": steps_with_prompt_tokens,
+        "steps_missing_author": steps_missing_author,
+    }
+
     error_text = reported_error or ""
     context_window_exceeded_error = "ContextWindowExceededError" in error_text
     context_window_exceeded_reported_tokens = None
@@ -339,6 +482,22 @@ def extract_run(
         "context_window_exceeded_reported_tokens": context_window_exceeded_reported_tokens,
         "malformed_output_error": malformed_output_error,
         "malformed_output_context_boundary_evidence": malformed_output_context_boundary_evidence,
+
+        # WI-3.5a (schema v2, additive) — root-agent-only vs. sub-agent-only
+        # prompt-token series, derived from `extra.author` on each
+        # prompt-token-bearing trace step. See module docstring.
+        "root_agent_prompt_tokens_by_step": root_agent_prompt_tokens_by_step,
+        "sub_agent_prompt_tokens_by_step": sub_agent_prompt_tokens_by_step,
+        "max_root_agent_prompt_tokens": max_root_agent_prompt_tokens,
+        "last_root_agent_prompt_tokens": last_root_agent_prompt_tokens,
+        "max_sub_agent_prompt_tokens": max_sub_agent_prompt_tokens,
+        "last_sub_agent_prompt_tokens": last_sub_agent_prompt_tokens,
+        "sub_agent_step_count": sub_agent_step_count,
+        "sub_agent_invocation_count": sub_agent_invocation_count,
+        "root_prompt_tokens_nondecreasing": root_prompt_tokens_nondecreasing,
+        "root_prompt_tokens_first_step_above_14336": root_prompt_tokens_first_step_above_14336,
+        "largest_root_prompt_increase": largest_root_prompt_increase,
+        "prompt_token_author_coverage": prompt_token_author_coverage,
 
         "gold_target_files": gold_target_files,
         "gold_target_file_read": gold_target_file_read,
@@ -444,7 +603,7 @@ def main(argv: list[str] | None = None) -> int:
     all_runs.sort(key=lambda r: (r["repeat"], r["task_id"]))
 
     document = {
-        "schema": "m3_signal_extraction_v1",
+        "schema": "m3_signal_extraction_v2",
         "counted_run_count": len(all_runs),
         "repeats": list(REPEATS),
         "tasks": list(COUNTED_TASKS),

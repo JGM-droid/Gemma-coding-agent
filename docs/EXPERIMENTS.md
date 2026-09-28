@@ -1487,3 +1487,263 @@ AC3-8's exact frozen wording is: *"a competition-budget compatibility analysis i
 **UNPROVEN**
 - Any counterfactual claim about run outcomes under actual competition-budget enforcement (per the explicit exclusions in §E) — not claimed anywhere in this analysis.
 - That budget incompatibility is a/the root cause of the Milestone 2 baseline's low resolution rate — not claimed; root-cause attribution remains undetermined for all 22 failures, unchanged from WI-3.3.
+
+---
+
+### Experiment: WI-3.5a, context-metric correction and competition-evidence addendum
+
+#### A. Purpose
+
+This is a corrective, evidence-quality work item, not a new benchmark experiment. It exists because a read-only project audit performed on 2026-09-28 found four issues in the evidence WI-3.2 through WI-3.5 produced, which needed correction or qualification before WI-3.6 synthesizes evidence into an intervention hypothesis:
+
+1. **The retained extractor's v1 `prompt_tokens_by_step`/`max_recorded_prompt_tokens` fields mix root-agent and sub-agent prompt-token contexts.** Every frozen trace step carries its own `extra.author` field (`"swe_baseline_agent"` for the root agent; e.g. `"code_analyzer_agent"` for a sub-agent invoked as a tool). The v1 extractor's per-step prompt-token series concatenated both authors' steps into one series, which understates the root agent's own actual context growth whenever a sub-agent step happens to be the trace's last-recorded prompt-token-bearing step (the sub-agent's context is its own separate, typically shorter-lived conversation, not a continuation of the root agent's). An additive extractor change was necessary — rather than a narrative-only fix — because separating the two series correctly and reproducibly requires machine-checked per-step author attribution across all 24 runs, which is exactly the kind of deterministic, citable extraction this script exists to do (per its WI-3.1 governance).
+2. **One WI-3.3 §C narrative statement about `rich_3130` is factually incorrect.** WI-3.3 stated the task's gold-target file was "never read or edited in any repeat" across `rich_3130`'s three repeats; this is wrong for r1, where the v1 extractor's own `gold_target_file_read`/`gold_target_file_edited` fields were already `true` (this was a narrative-writing error in WI-3.3, not an extractor bug — the underlying field was already correct).
+3. **The local Milestone 2 path did not use the context compaction/context-caching mechanisms the official host reference path uses.** This is now independently confirmed from the repository-local official wheel (§D below), not merely asserted.
+4. **WI-3.5 compared the local development budgets against the sample submission's example `eval_config.yaml` values, not a demonstrated mandatory competition-wide per-task limit.** Per the 2026-09-28 audit, the host reference path treats these values as optional/participant-configurable, with its own fallback defaults when a submission omits them.
+
+This entry corrects and qualifies the affected evidence **without rewriting the historical WI-3.3/WI-3.5 entries above**, without relabelling any of the 24 runs, and without changing the frozen codebook, precedence rules, or aggregate counts. Root cause remains undetermined for all 22 failures, exactly as WI-3.3 left it.
+
+**Provenance discipline for this entry:** every external (non-repository) fact below is labelled with exactly one of: *"independently reverified during WI-3.5a"* (this work item itself retrieved/computed the fact from a source it had direct access to) or *"transcribed from the 2026-09-28 audit, not re-retrieved"* (this work item did not re-fetch the external source and is reporting what the audit stated). The competition-website sources (S1–S4) were not re-fetched during WI-3.5a — Kaggle competition pages typically require an authenticated session this agent does not have — and are transcribed accordingly. The repository-local wheel (S6) **was** independently reverified during this work item, using the exact commands recorded in §D.
+
+#### B. Deterministic verification
+
+**1. Frozen evidence integrity.** SHA-256 computed over all 83 files under `results/m2_baseline_v2_r1/`, `_r2/`, `_r3/` plus `kaggle_data/tasks.jsonl` (84 files total) before any change in this work item, and again after all extractor changes, extractor runs (×2 for v2, plus the v1 comparison run), and wheel inspection:
+```bash
+find results/m2_baseline_v2_r1 results/m2_baseline_v2_r2 results/m2_baseline_v2_r3 -type f | sort | xargs sha256sum > <scratch>/wi35a_pre_hashes.txt
+sha256sum kaggle_data/tasks.jsonl >> <scratch>/wi35a_pre_hashes.txt
+# ... all extractor/wheel work ...
+find results/m2_baseline_v2_r1 results/m2_baseline_v2_r2 results/m2_baseline_v2_r3 -type f | sort | xargs sha256sum > <scratch>/wi35a_post_hashes.txt
+sha256sum kaggle_data/tasks.jsonl >> <scratch>/wi35a_post_hashes.txt
+diff <scratch>/wi35a_pre_hashes.txt <scratch>/wi35a_post_hashes.txt
+```
+**Result:** `diff` empty — all 84 files byte-identical before and after.
+
+**2. Determinism.** The upgraded `scripts/m3_extract_signals.py` (schema `m3_signal_extraction_v2`) was run twice to scratch paths outside the repository and outside `results/`:
+```bash
+python scripts/m3_extract_signals.py -o <scratch>/wi35a_v2_run1.json
+python scripts/m3_extract_signals.py -o <scratch>/wi35a_v2_run2.json
+sha256sum <scratch>/wi35a_v2_run1.json <scratch>/wi35a_v2_run2.json
+diff <scratch>/wi35a_v2_run1.json <scratch>/wi35a_v2_run2.json
+```
+**Result:** both runs produced `24 run records`; identical SHA-256 (`42ee4a3a6d15d6f694c65f473cd50c1e8fabc1af446419b8b5ef2981b3833758`); `diff` empty.
+
+**3. Backward compatibility.** The unmodified v1 script was retrieved directly from Git history (the commit this work item started from) and run separately in scratch:
+```bash
+git show 4c7d398:scripts/m3_extract_signals.py > <scratch>/m3_extract_signals_v1.py
+python <scratch>/m3_extract_signals_v1.py --results-dir results --tasks-file kaggle_data/tasks.jsonl -o <scratch>/wi35a_v1_output.json
+```
+A Python comparison script (not committed; scratch-only) then compared v1 and v2 output programmatically for all 24 runs: for every one of v1's 37 per-run fields, checked that the field exists in v2 with the identical value; separately listed the v2-only fields present.
+**Result:** `v1 field count: 37`, `mismatches: 0`. The `new v2-only fields` set matched exactly the 12 fields specified for WI-3.5a: `root_agent_prompt_tokens_by_step`, `sub_agent_prompt_tokens_by_step`, `max_root_agent_prompt_tokens`, `last_root_agent_prompt_tokens`, `max_sub_agent_prompt_tokens`, `last_sub_agent_prompt_tokens`, `sub_agent_step_count`, `sub_agent_invocation_count`, `root_prompt_tokens_nondecreasing`, `root_prompt_tokens_first_step_above_14336`, `largest_root_prompt_increase`, `prompt_token_author_coverage`. Top-level structure matched apart from `"schema"` (`v1` → `v2`) and the additive per-run fields, confirmed by direct comparison of `counted_run_count`, `repeats`, and `tasks`.
+
+**4. Invariants**, checked programmatically across all 24 runs:
+- Root-agent and sub-agent prompt-token series together reproduce the original v1 `prompt_tokens_by_step` entries by `(step_id, prompt_tokens)`: **0 mismatches** across 24 runs.
+- `max_recorded_prompt_tokens == max(max_root_agent_prompt_tokens, max_sub_agent_prompt_tokens)` (treating an absent sub-agent max as "root value only"): **0 mismatches** across 24 runs.
+- `prompt_token_author_coverage.steps_missing_author == 0` for every run: **confirmed** (had this been nonzero for any step, the extractor would have failed loudly before producing output at all — see the module docstring and `_fail` call added in this work item).
+- Dataset invariants: `counted_run_count: 24`; `{"r1": 8, "r2": 8, "r3": 8}`; exactly 2 resolved runs, both `rich_3905` (`r1`, `r3`) — **all confirmed**, matching every prior work item.
+
+**5. Known audit values — independently reproduced, not hard-coded:**
+- `r2/rich_4079`: `max_root_agent_prompt_tokens == 31671` — **reproduced**. `largest_root_prompt_increase`: `from_step_id: 20, to_step_id: 21, increase: 19461, from_step_tool_names: ["read_file"], from_step_tool_args_subset: {"filepath": "tests/test_table.py"}` — **reproduced exactly**.
+- `r1/rich_3130`: `gold_target_file_read: true`, `gold_target_file_edited: true` — **reproduced** (these v1 fields were already correct; only the WI-3.3 §C narrative sentence describing this run was wrong — see §E.1).
+- Sub-agent step presence: counting runs with `sub_agent_step_count > 0` across all 24 v2 records gives **13** — **reproduced exactly**.
+- Total agent steps: the audit's "555 agent steps total" was found, on inspection, to refer to the count of trace steps with `source == "agent"` across all 24 raw trace files (a distinct, directly-available trace field, not a v2-extracted field) — computed independently as:
+  ```python
+  sum(1 for step in trace["steps"] if step.get("source") == "agent")  # summed across all 24 trace files
+  ```
+  **Result: 555 — reproduced exactly.** (For contrast, the count of prompt-token-*bearing* steps specifically — the v2 `prompt_tokens_by_step` length, summed across all 24 runs — is 512; this is a different, smaller count than "555 agent-source steps," since some `source == "agent"` steps carry no `metrics.prompt_tokens`, e.g. steps whose sole content is a tool call with no accompanying LLM generation record. Both counts are recorded here since the audit's original 555 figure did not specify which definition it used; the `source == "agent"` interpretation is the one that reproduces 555 exactly.)
+
+No expected value differed from what the audit reported; the extractor was not tuned to force any of these values, and no value here was hard-coded into the script (`ROOT_AGENT_AUTHOR`, `ROOT_PROMPT_TOKEN_REFERENCE_THRESHOLD`, and `ALLOWED_TOOL_ARG_KEYS` are the only new named constants, none of which encode a specific run's numeric result).
+
+**6. Official local wheel check (S6) — independently reverified during WI-3.5a**, read-only, via Python `zipfile` against `kaggle_data/harness_wheels/swegemma-0.2.7-py3-none-any.whl` (nothing extracted to disk or into the repository):
+```bash
+python -c "
+import zipfile
+z = zipfile.ZipFile('kaggle_data/harness_wheels/swegemma-0.2.7-py3-none-any.whl')
+print(z.read('swegemma/config.py').decode('utf-8'))
+"
+```
+**Findings from `swegemma/config.py`:** the `EvalConfig` dataclass declares
+```python
+context_cache_config: ContextCacheConfig | None = None
+events_compaction_config: EventsCompactionConfig | None = None
+```
+as `None`-defaulted fields (lines 116–117 of the extracted module), and `EvalConfig.__post_init__` (lines 124–207) merges flat kwargs into `budget`/`harness` but **never assigns or otherwise sets** `context_cache_config` or `events_compaction_config` — they remain whatever the caller passed in, defaulting to `None`.
+
+```bash
+python -c "
+import zipfile
+z = zipfile.ZipFile('kaggle_data/harness_wheels/swegemma-0.2.7-py3-none-any.whl')
+content = z.read('swegemma/harness/agent_runner.py').decode('utf-8')
+# searched for 'compaction'/'context_cache'/'cache_config' (case-insensitive)
+"
+```
+**Finding from `swegemma/harness/agent_runner.py`:** the only two matches are
+```python
+if config.context_cache_config is not None:
+    app_kwargs['context_cache_config'] = config.context_cache_config
+if config.events_compaction_config is not None:
+    app_kwargs['events_compaction_config'] = config.events_compaction_config
+```
+— i.e. these fields are used **conditionally**, only if a caller already set them on `EvalConfig`; the package itself never populates them.
+
+```bash
+python -c "
+import zipfile
+z = zipfile.ZipFile('kaggle_data/harness_wheels/swegemma-0.2.7-py3-none-any.whl')
+for n in [n for n in z.namelist() if n.endswith('.py')]:
+    c = z.read(n).decode('utf-8', errors='replace')
+    if 'eval_config.yaml' in c or ('eval_config' in c.lower() and 'yaml' in c.lower()):
+        print(n)
+"
+```
+**Finding:** no output — **no file in the `swegemma` package references `eval_config.yaml`** or otherwise loads an `EvalConfig` from YAML. A further scan of every `.py` file in the wheel for any `yaml` usage (36 files checked) found YAML handling only for `models.yaml` (`swegemma/cli.py`, `swegemma/models/registry.py`, `swegemma/models/discovery.py`) and submission `agent.yaml`/`root_agent.yaml` discovery (`swegemma/submission.py`) — never for `eval_config.yaml`. A scan of `swegemma/cli.py`'s `add_argument` calls found no `--*compaction*` or `--*cache*` flag exposed by the `swegemma eval` CLI used for the 24 Milestone 2 runs.
+
+**Conclusion, independently established from S6 alone (no external source needed for this part):** the `swegemma` package that produced the 24 counted Milestone 2 runs supports `context_cache_config`/`events_compaction_config` as optional `EvalConfig` fields, but nothing inside the package itself — not the CLI, not `EvalConfig.__post_init__`, not any YAML loader — ever populates them from `eval_config.yaml` or any other source; they stay `None` unless a caller outside this package explicitly constructs an `EvalConfig` with them set. Per `docs/EVALUATION.md`'s frozen run procedure (the local `swegemma eval --task-ids ...` CLI invocation, D6, and this file's WI-3.2/WI-3.3 entries), the 24 counted Milestone 2 runs were executed through exactly this CLI path, with no such caller-supplied values. **Therefore the 24 counted runs ran with no configured context compaction and no configured context caching, independently confirmed from the local wheel, not merely inferred from the external audit.**
+
+**7. Scope checks:**
+```bash
+git diff --stat
+```
+touches only `scripts/m3_extract_signals.py`, `docs/EXPERIMENTS.md`, `docs/ROADMAP.md` — confirmed. The `docs/EXPERIMENTS.md` change is append-only (a single new entry added at the end of the Milestone 3 section; no existing entry's text was altered). The `docs/ROADMAP.md` diff is limited to the WI-3.5a insertion, work-item/AC status updates, and one new "Qualifications recorded by WI-3.5a" section (see below) — no existing historical sentence was reworded.
+```bash
+git diff scripts/m3_extract_signals.py | grep -iE "^\+.*\b(subprocess|socket|urllib|requests|http\.client|os\.system|import os\b)"
+```
+**Result:** no matches — no new subprocess, socket, urllib, requests, or equivalent network/process behavior was added to the extractor.
+
+#### C. 24-run context table
+
+Root-only and sub-agent-only prompt-token figures, from the v2 extractor (all values independently re-derived; see §B). "First >14,336" is the first root-agent step_id whose prompt-token count exceeds 14,336 (the host reference path's `EventsCompactionConfig.token_threshold`, per S4 — used here purely as a fixed reference point for comparison, not as a claim that this threshold applied to any Milestone 2 run). "Largest root increase" is `from_step→to_step (+increase)`; full detail (preceding tool, filepath, observation size, completion tokens) is broken out in §D for the six runs where it matters most, and is available for every run in the extracted JSON's `largest_root_prompt_increase` field.
+
+| Repeat | Task | Max root | Last root | Max sub-agent | Sub-agent invocations | Root nondecreasing? | First root >14,336 | Largest root increase | `ContextWindowExceededError` tokens |
+|---|---|---|---|---|---|---|---|---|---|
+| r1 | rich_3061 | 19,016 | 19,016 | 7,822 | 1 | yes | step 24 | 22→23 (+4,149) | — |
+| r1 | rich_3130 | 20,502 | 20,502 | 9,887 | 2 | yes | step 35 | 32→33 (+2,431) | — |
+| r1 | rich_3278 | 16,291 | 16,291 | 9,312 | 1 | yes | step 24 | 16→17 (+3,282) | — |
+| r1 | rich_3470 | 26,305 | 26,305 | 6,864 | 2 | yes | step 18 | 29→30 (+2,709) | — |
+| r1 | rich_3894 | 18,457 | 18,457 | — (none) | 0 | yes | step 10 | 9→10 (+8,780) | — |
+| r1 | rich_3905 (resolved) | 9,818 | 9,818 | — (none) | 0 | yes | — (never) | 6→7 (+1,842) | — |
+| r1 | rich_4076 | 15,851 | 15,851 | — (none) | 0 | yes | step 15 | 6→7 (+2,220) | — |
+| r1 | rich_4079 | 14,763 | 14,763 | — (none) | 0 | yes | step 12 | 7→8 (+2,291) | — |
+| r2 | rich_3061 | 12,722 | 12,722 | 13,670 | 4 | yes | — (never) | 42→43 (+1,860) | — |
+| r2 | rich_3130 | 22,395 | 22,395 | — (none) | 0 | yes | step 11 | 6→7 (+6,437) | 44,651 |
+| r2 | rich_3278 | 22,466 | 22,466 | — (none) | 0 | yes | step 17 | 19→20 (+4,760) | — |
+| r2 | rich_3470 | 14,870 | 14,870 | 13,389 | 2 | yes | step 39 | 8→9 (+1,812) | — |
+| r2 | rich_3894 | 19,014 | 19,014 | — (none) | 0 | yes | step 8 | 7→8 (+8,780) | — |
+| r2 | rich_3905 (failed this repeat) | 12,793 | 12,793 | 9,901 | 2 | yes | — (never) | 16→17 (+1,896) | — |
+| r2 | rich_4076 | 13,465 | 13,465 | 11,106 | 2 | yes | — (never) | 21→22 (+1,596) | — |
+| r2 | rich_4079 | **31,671** | 31,671 | 11,152 | 2 | yes | step 21 | 20→21 (+19,461) | 33,378 |
+| r3 | rich_3061 | 29,642 | 29,642 | 8,613 | 1 | yes | step 26 | 25→26 (+4,514) | — |
+| r3 | rich_3130 | 31,066 | 31,066 | — (none) | 0 | yes | step 14 | 13→14 (+2,487) | 32,866 |
+| r3 | rich_3278 | 26,518 | 26,518 | 11,152 | 1 | yes | step 26 | 25→26 (+2,349) | — |
+| r3 | rich_3470 | 14,956 | 14,956 | — (none) | 0 | yes | step 16 | 10→11 (+1,985) | — |
+| r3 | rich_3894 | 17,334 | 17,334 | — (none) | 0 | yes | step 7 | 6→7 (+8,837) | — |
+| r3 | rich_3905 (resolved) | 9,227 | 9,227 | 15,852 | 1 | yes | — (never) | 17→18 (+975) | — |
+| r3 | rich_4076 | 23,124 | 23,124 | — (none) | 0 | yes | step 9 | 9→10 (+6,651) | — |
+| r3 | rich_4079 | 24,155 | 24,155 | 9,614 | 2 | yes | step 21 | 6→7 (+2,352) | 46,447 |
+
+Every one of the 24 runs' root-agent prompt-token series is nondecreasing (`root_prompt_tokens_nondecreasing: true`) — an observed fact, not a claim about why; no run shows a root-context decrease between two of its own recorded steps.
+
+#### D. Six-run detail table — context-overflow and malformed-output runs
+
+The 4 `ContextWindowExceededError` runs and the 2 `JSONDecodeError`/malformed-output runs, with root-only and sub-agent-only **last-complete** context values (i.e., the last root-agent and last sub-agent prompt-token-bearing step actually recorded before the run ended), and the step immediately preceding each run's largest single root-context increase.
+
+| Run | Last-complete root context | Last-complete sub-agent context | Reported failing-request tokens (from `error` field) | Step immediately before the largest root increase |
+|---|---|---|---|---|
+| r2/rich_3130 | 22,395 (step 17) | — (no sub-agent step this run) | 44,651 | Step 6: `search_similar_code(query="Table")`; completion 247 tokens; observation 18,542 chars; increase to step 7: +6,437 |
+| r2/rich_4079 | 31,671 (step 21) | 11,152 (step 27) | 33,378 | Step 20: `read_file(filepath="tests/test_table.py")`; completion 106 tokens; observation 25,123 chars; increase to step 21: +19,461 |
+| r3/rich_3130 | 31,066 (step 14) | — (no sub-agent step this run) | 32,866 | Step 13: `read_file(filepath="rich/table.py", start_line=1)`; completion 416 tokens; observation 6,530 chars; increase to step 14: +2,487 |
+| r3/rich_4079 | 24,155 (step 21) | 9,614 max / 7,865 last (step 27) | 46,447 | Step 6: `read_file(filepath="rich/table.py", start_line=1)`; completion 283 tokens; observation 6,470 chars; increase to step 7: +2,352 |
+| r1/rich_3061 (malformed, undetermined-cause) | 19,016 (step 28) | 7,822 (step 21) | n/a (`JSONDecodeError`/"Unterminated string" text, no numeric token count) | Step 22: `edit_file(filepath="rich/text.py")`; completion 3,747 tokens; observation 1,170 chars; increase to step 23: +4,149 |
+| r3/rich_3061 (malformed, undetermined-cause) | 29,642 (step 33) | 8,613 (step 21) | n/a (same malformed-output pattern) | Step 25: `edit_file(filepath="rich/text.py")`; completion 3,618 tokens; observation 2,972 chars; increase to step 26: +4,514 |
+
+Objective sequence facts only, per each run:
+- **r2/rich_3130:** the largest root increase immediately followed a `search_similar_code` observation of 18,542 characters; the preceding model completion was 247 tokens. The run's last-complete root context (22,395) is well below the reported failing-request size (44,651) — a gap of 22,256 tokens between the last fully-recorded root step and the point of failure.
+- **r2/rich_4079:** the largest root increase immediately followed a `read_file` observation (`tests/test_table.py`) of 25,123 characters; the preceding model completion was 106 tokens. The run's last-complete root context (31,671) is close to the reported failing-request size (33,378) — a gap of 1,707 tokens.
+- **r3/rich_3130:** the largest root increase immediately followed a `read_file` observation (`rich/table.py`) of 6,530 characters; the preceding model completion was 416 tokens. The run's last-complete root context (31,066) is very close to the reported failing-request size (32,866) — a gap of 1,800 tokens.
+- **r3/rich_4079:** the largest root increase immediately followed a `read_file` observation (`rich/table.py`) of 6,470 characters; the preceding model completion was 283 tokens. The run's last-complete root context (24,155) is well below the reported failing-request size (46,447) — a gap of 22,292 tokens between the last fully-recorded root step and the point of failure.
+- **r1/rich_3061:** the largest root increase immediately followed an `edit_file` observation (`rich/text.py`) of 1,170 characters; the preceding model completion was 3,747 tokens (the largest completion-token figure among these six runs' "from" steps). The run terminated via a malformed-output/`JSONDecodeError` mechanism (WI-3.3's terminal label, unchanged), not a `ContextWindowExceededError`; the last-complete root context (19,016) is well below the 32,768-token limit.
+- **r3/rich_3061:** the largest root increase immediately followed an `edit_file` observation (`rich/text.py`) of 2,972 characters; the preceding model completion was 3,618 tokens. Same terminal mechanism as r1/rich_3061 (malformed output, undetermined-cause); last-complete root context (29,642) is closer to, but still below, the 32,768-token limit.
+
+**Explicitly not claimed, for any of the six runs above:**
+- That the tool output size caused the failure.
+- That Unicode content or tokenization behavior caused it.
+- That context compaction or context caching would have prevented the overflow or the malformed output.
+- That model verbosity (the completion-token figures shown) is the root cause.
+
+Root cause remains **UNDETERMINED** for all six runs, unchanged from WI-3.3.
+
+#### E. Append-only qualifications
+
+The following qualify specific statements in the WI-3.3 and WI-3.5 entries above **without rewriting them**. The historical entries' text is left exactly as committed; these qualifications are the authoritative correction/addendum going forward.
+
+**E.1 — WI-3.3 §C / `rich_3130`.** The historical statement "all 3 repeats [of `rich_3130`] terminate via a resource-exhaustion mechanism (budget or context) before diagnosis is possible... the gold-target file is never read or edited in any repeat" is **factually incorrect for r1**: the v1 extractor's own `gold_target_file_read`/`gold_target_file_edited` fields were already `true` for `r1/rich_3130` (re-confirmed by the v2 extractor in §B.5 above — this is not new evidence, it was already correct in the extracted JSON; only the WI-3.3 narrative sentence summarizing it was wrong). The statement **remains true for r2 and r3** of `rich_3130` (both `gold_target_file_read`/`_edited` = `false`, unchanged). This qualification does **not** change: the WI-3.3 §B localization-failure qualifier count of 9 (that count never included `r1/rich_3130`, so it is unaffected); `r1/rich_3130`'s terminal label (tool-call budget exhaustion, category 5 — unchanged, since `r1/rich_3130`'s terminal mechanism was never based on localization); the codebook; the precedence order; or any other run's label. No relabelling occurred as a result of this correction.
+
+**E.2 — WI-3.3 §A/§D context figures.** The WI-3.3 "context-involved analysis" (§D) computed a "last complete step" prompt-token value per context-window-exceeded run from the v1, author-mixed `prompt_tokens_by_step` series. Per §B.5/§C/§D above, the v2 root-only/sub-only split shows this was only materially misleading for **one** of the four context-window runs: `r2/rich_4079`. WI-3.3 reported "last complete step at 11,152 prompt tokens" for that run; §D above shows **11,152 belonged to the sub-agent's own, separate context (step 27)**, while the **root agent's own context had already reached 31,671 tokens (step 21)** — six steps earlier in the trace, and only 1,707 tokens short of the reported 33,378-token failing request, not the 22,226-token gap WI-3.3's mixed figure implied. For the other three context-window runs (`r2/rich_3130`, `r3/rich_3130`, `r3/rich_4079`), the v1 "last complete step" figure happened to already be a root-agent step (no sub-agent step occurred after it in those particular traces), so no numeric correction is needed for those three — only the general caveat that the field's definition mixed authors applies to the schema, not to those three runs' specific reported numbers. WI-3.3's own interpretive sentence — "This gap is consistent with... the terminating (overflowing) request itself is not captured as a complete trace step" — is **not** converted into a causal claim by this correction: the gap for `r2/rich_3130` and `r3/rich_4079` remains large (22,256 and 22,292 tokens respectively) even under the corrected root-only figures, and no claim is made here about why.
+
+**E.3 — 32K context / compaction / caching.** The Milestone 3 purpose section (top of this file's Milestone 3 ROADMAP section) lists "the 32,768-token local context... rather than something that would also affect the 31B competition profile" as one candidate local-development-profile limitation to investigate. This is qualified as follows:
+- The host reference path (S4, transcribed from the 2026-09-28 audit, not re-retrieved) also configures `vLLM` with `max_model_len=32768`. **Therefore the 32,768-token figure itself is not, by itself, a demonstrated local-profile mismatch** — both paths use the same context window size.
+- What **is** independently confirmed (§B.6 above, from the repository-local wheel, not the external audit) is that **the local `swegemma` CLI path used for all 24 Milestone 2 runs had no configured `events_compaction_config` and no configured `context_cache_config`** — both fields exist in the package's `EvalConfig` but are never populated by the CLI, and stayed at their `None` default for these 24 runs.
+- The host reference path (S4, transcribed, not re-retrieved) is reported to configure both: `EventsCompactionConfig(compaction_interval=15, overlap_size=2, token_threshold=14336, event_retention_size=5)` and `ContextCacheConfig(min_tokens=2048, ttl_seconds=1800, cache_intervals=10)`.
+- `kaggle_data/HARNESS_README.md` (repository-local, read during this work item) states `compaction_interval=5`, while S4's audit-transcribed value is `compaction_interval=15`. **This is a discrepancy between two official-source artifacts and is recorded as such, not resolved by assumption** — this work item does not guess which value (if either) the hidden competition scorer actually uses.
+- The hidden scorer's exact compaction behavior and interval, and whether it uses compaction/caching at all for the actual competition runs, remain **PARTIAL** — the scoring code itself is unpublished, so this cannot be resolved from any artifact this project has access to.
+- **Not claimed:** that configuring compaction or context caching would have improved, prevented an overflow in, or otherwise changed the outcome of any of the 24 counted runs. This section records a configuration difference between the local and host reference paths; it does not assert an effect.
+
+**E.4 — WI-3.5 budget framing.** WI-3.5's per-run compatibility table, aggregate counts, and their evidentiary content (§B/§C of the WI-3.5 entry above) are **not** qualified and **remain factually valid** — they correctly report what the 24 counted runs' artifacts show relative to the sample submission's `eval_config.yaml` values. What is qualified is the **framing** of those values as "the sample submission's own Kaggle budgets": per the 2026-09-28 audit (transcribed, not re-retrieved):
+- The 10-tool-call / 1-minute / 50-turn / 60-second-command values in `kaggle_data/sample_submission/eval_config.yaml` are the **sample submission's own example configuration values**, and — per S1/S4 — these fields are **participant-configurable per submission**, not a value fixed by the competition for every submission.
+- The host reference path reads a submission's own `eval_config.yaml`, and when a key is missing, S4's audit found the host's own fallback defaults to be `timeout_seconds=300`, `max_tool_calls=100`, `max_time_minutes=60.0`, `max_turns=None` — markedly closer to (or in the tool-call/turn cases, looser than) the local development profile than the sample submission's own example values are.
+- What the **actual hidden-scorer defaults or effective per-task limits** are for a real competition run remains **PARTIAL/UNKNOWN**, since the scoring code itself is unpublished.
+- S4's audit reported that, using the sample submission's example configuration values (10 calls / 1 minute), both of the host notebook's own two demonstrated tasks timed out at 4 of 10 tool calls — reported here as a transcribed audit finding about the *host's own demo*, not as new evidence this work item measured.
+- **`docs/EVALUATION.md` remains frozen and was not edited by this work item**, per the explicit prohibition.
+
+**E.5 — Competition constraints: published fact vs. derived estimate.** Per the 2026-09-28 audit (transcribed, not re-retrieved), the following are recorded as **published facts** from the competition's own overview/data pages:
+- a 12-hour limit to submit patches for all tasks, including sandbox setup and excluding patch validation time (S1);
+- approximately 120 hidden test tasks (S2);
+- approximately evenly divided between public and private splits (S2);
+- curated from private repositories (S2);
+- filtered so a larger frontier model passes or comes within one test case of passing (S2);
+- one submission per day, two final selections (S3); no additional per-task runtime rule was identified on the Rules page by the audit (S3).
+
+The following is a **derived estimate**, computed in this work item from the published facts above, not itself a published number:
+- 12 hours ÷ ~120 tasks ≈ **6 minutes average per task**, *if* tasks are scored strictly sequentially with no parallelism.
+- For comparison: the local development profile's 20-minute-per-task allowance, multiplied across the same ~120-task count, is ≈ **40 hours** — over 3× the 12-hour total limit.
+- **Task parallelism during hidden scoring is explicitly UNKNOWN** (not stated in any source reviewed by the audit), so the ~6-minute figure is **not** a published per-task limit and must not be treated as one; it is only what the arithmetic implies under a sequential-scoring assumption that has not been confirmed.
+
+**E.6 — VERIFIED / PARTIAL / UNKNOWN classification of the evidence above:**
+
+**VERIFIED** (independently reverified during WI-3.5a, from repository-local sources):
+- The `swegemma` package's `EvalConfig.context_cache_config`/`events_compaction_config` are `None`-defaulted and never populated by the package itself, and the local CLI path used for all 24 counted runs therefore ran with no configured compaction or context caching (§B.6).
+- `kaggle_data/HARNESS_README.md`'s stated `compaction_interval=5` value (read directly, repository-local).
+- All extractor determinism/backward-compatibility/invariant/known-value checks (§B.1–B.5).
+
+**PARTIAL / UNKNOWN:**
+- The hidden scorer's actual compaction setting and interval (unpublished scoring code).
+- The hidden scorer's effective defaults for any budget key a real competition submission omits (unpublished scoring code; S4's audit-transcribed fallback values describe the *host reference notebook*, which may or may not match the actual hidden scorer).
+- Whether hidden-scorer scoring tasks run sequentially or in parallel (not stated in any source reviewed).
+- The hidden scorer's sandbox backend (not established by any source reviewed).
+- Byte identity between the S5 wheelhouse dataset's wheels and this repository's local wheels — S5's audit findings (transcribed, not re-retrieved) found matching package **names and versions** only; no hash comparison was performed by the audit or by this work item, so byte identity remains **unproven**.
+- The competition-website audit findings (S1–S4) themselves, since they were not re-fetched during this work item — transcribed from the 2026-09-28 audit as instructed, not independently re-verified against the live pages.
+
+#### F. AC3-8
+
+**AC3-8 remains SATISFIED**, with the following qualification recorded (not a reopening): WI-3.5 did perform the required competition-budget compatibility analysis, and it did so against an evaluation configuration that is genuinely read by the host reference path (`eval_config.yaml`, confirmed by S4, transcribed) — so the analysis was not baseless. The qualification is that WI-3.5's interpretation is **narrower** than "the mandatory competition-wide per-task limit": it measured compatibility with the **sample submission's own example configuration values**, which the host path treats as **participant-configurable**, not fixed. WI-3.5's per-run observations and aggregate counts (§B/§C of that entry) remain factually valid as measurements against that specific configuration; this work item does not reopen, retract, or require re-doing that analysis, and AC3-8's exact wording ("a competition-budget compatibility analysis is performed") remains satisfied by it.
+
+#### G. Status
+
+- **No intervention has been selected.** This work item corrects and qualifies evidence only.
+- **AC3-9** (secondary-metric pre-registration) remains **pending**.
+- **AC3-10** (intervention hypothesis or explicit insufficiency conclusion) remains **pending**.
+- **WI-3.6 has not started.**
+- **`docs/BUILD_JOURNAL.md` closure remains deferred to WI-3.7**, and WI-3.7 must record this correction honestly (i.e., that WI-3.3/WI-3.5's original evidence needed a follow-up correction, not that it was correct from the start).
+
+**VERIFIED**
+- All items in §B.1–B.6 (frozen-evidence integrity, extractor determinism, v1/v2 backward compatibility, per-run and dataset-wide invariants, all audit-cited known values, and the S6 wheel-package findings).
+- The corrected root/sub-agent context figures in §C/§D, independently re-derived from the frozen traces via the upgraded, re-verified extractor.
+- `r1/rich_3130`'s gold-target-file read/edit status (§E.1) — already correct in the v1-extracted field; only the WI-3.3 narrative sentence was wrong, now corrected here.
+
+**PARTIAL**
+- Everything listed under §E.6's "PARTIAL/UNKNOWN," reproduced here as this entry's own PARTIAL findings: hidden-scorer compaction settings, hidden-scorer budget-key defaults, hidden-scorer task parallelism, hidden-scorer sandbox backend, and S5-wheel byte identity.
+- The `HARNESS_README.md` (`compaction_interval=5`) vs. S4-audit (`compaction_interval=15`) discrepancy — recorded, not resolved.
+
+**UNPROVEN**
+- Any claim that configuring context compaction or context caching would have changed any of the 24 counted runs' outcomes — not claimed anywhere in this entry.
+- Any claim that the S1–S4 competition-website audit findings, as transcribed here, are currently accurate on the live pages — they were not re-fetched during this work item.
+- Root cause for any of the 22 WI-3.3 failures, or for either of the two malformed-output runs specifically — remains undetermined, unchanged from WI-3.3.
