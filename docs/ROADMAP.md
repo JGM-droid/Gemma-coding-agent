@@ -40,11 +40,24 @@ Evidence: [EXPERIMENTS.md](EXPERIMENTS.md). Narrative: [BUILD_JOURNAL.md](BUILD_
 - A single root `LlmAgent` is the baseline until experiments justify more complexity.
 - No LoRA, RL, multi-agent designs or custom harness replacement unless evidence later justifies them.
 
+## Milestone 2: Baseline Agent and Reproducible Evaluation (**PASS**, closed)
+
+**Status: CLOSED — PASS (baseline measurement).** Evidence: [EXPERIMENTS.md](EXPERIMENTS.md) (per-run metrics, three-round synthesis, post-baseline environment control). Narrative: [BUILD_JOURNAL.md](BUILD_JOURNAL.md), entries 15–20.
+
+**Formal result:** by the PASS/PARTIAL PASS/FAIL rule and acceptance criteria below (frozen before any model run), the measured baseline satisfies the numeric PASS conditions: 8 eligible Rich tasks, 2 of the 24 measured runs resolved (≥1 required), $0 spend, and no FAIL trigger. AC-1 through AC-10 are all now satisfied, including AC-9 (this build journal entry, entries 15–20) and AC-10 (the post-baseline environment control, which reproduced the pre-baseline eligibility state exactly). A poor pass rate is not a failure under this rule; the milestone measured the baseline and did not require a good score.
+
+**Verified (see EXPERIMENTS.md for full evidence):**
+- A reproducible, $0, fully local three-repeat baseline exists for the unmodified official `sample_submission` on the frozen 8-task Rich dev set: 2 of 24 measured runs resolved (r1: 1/8, r2: 0/8, r3: 1/8).
+- Only `rich_3905` showed any run-to-run instability (2/3); the other 7 tasks were stable-fail (0/3) across all three repeats.
+- The graph/search tools and the `agent_tool` sub-agent mechanism function correctly inside the real, unmodified agent (zero dependency or tool-level errors across all 24 measured runs), once the missing `cachetools`/`networkx` dependencies were repaired.
+- No infrastructure failure occurred in any of the 24 measured runs or the post-baseline control; both frozen environment fingerprints matched exactly throughout.
+- The post-baseline environment control reproduced the exact pre-baseline eligibility signature (same `resolved` values, same failing test IDs, same failure types) for all 8 tasks.
+
+**Important limitation:** this is a measurement milestone on one repository's 8-task slice, using the local E4B surrogate model, not the 31B competition model. It does **not** prove general coding capability, competition score, or production readiness, and it does not establish that the graph tools' results are useful (only that they run without error).
+
 # Active Milestone
 
-## Milestone 2: Baseline Agent and Reproducible Evaluation
-
-**Status: APPROVED, IN PROGRESS.** The design was revised at WI-2.2a after benchmark validation exposed environment problems (see [EXPERIMENTS.md](EXPERIMENTS.md), Milestone 2). WI-2.1 and WI-2.2 are complete. The next work item is WI-2.2b.
+No milestone is currently active. Milestone 3's scope will be defined and approved by the project owner before any work begins, per [AGENTS.md](../AGENTS.md) §B/§C.
 
 ### Purpose
 
@@ -241,17 +254,9 @@ A poor pass rate is not a failure. The milestone measures the baseline and does 
   - The public tasks may appear in the model's training data, which could inflate the absolute pass rate.
 - **Memory limits:** harder tasks may hit VRAM or WSL RAM limits. Such failures are classified as infrastructure failures.
 
-### Next bounded work item: WI-2.2b, complete the canonical wheel pool
+### Work items (closed)
 
-WI-2.2b **must**:
-- download only the remaining official wheel files that are not yet in `kaggle_data/wheels/`, using the owner's signed-in Chrome session
-- verify the file count (124) and each file's size against Kaggle's listing
-- compute and record the pool fingerprint
-
-WI-2.2b **must not**:
-- run gates or models
-- change the cache or any repository file other than recording results
-- download task material
+All work items WI-2.1 through WI-2.6 are complete. Milestone 2 is closed (see Current State above and [EXPERIMENTS.md](EXPERIMENTS.md) for the full evidence trail from WI-2.1 through the formal three-round synthesis and this closure).
 
 # Future direction
 

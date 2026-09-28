@@ -389,3 +389,168 @@ I stopped trying to force the original mix of repositories. Doing that would hav
 
 ### What came next
 Download the rest of the official package set, rebuild the cache, and check Rich candidates one by one until 8 pass the gate or I've looked at 16.
+
+---
+
+## 15. Finding and fixing a real dependency gap the hard way
+
+### What I was trying to prove
+That the frozen benchmark procedure from entry 14 actually produced a trustworthy first baseline run.
+
+### What I did
+I ran the first attempt at the real, 3-repeat, 8-task baseline (`m2_baseline_r1`) using the frozen configuration. I looked closely at the results instead of just accepting a number.
+
+### Why I did it this way
+A baseline is only worth anything if it measured what it claims to measure — the unmodified official agent, including its **graph tools** (helpers that let the agent search and browse the code by meaning, not just by file name, using a pre-built map of the code).
+
+### What happened
+Seven of the eight tasks failed the graph tools outright with `No module named 'cachetools'` — a Python package the harness's own code needs but that had never been installed. So the "baseline" I'd just measured hadn't actually exercised the agent the plan called for. Separately, one task made the whole machine unresponsive for about 80 minutes under heavy memory pressure, and an unrelated background program (`OpenClaw`) turned out to be quietly starting itself on every boot and eating memory.
+
+### What failed or surprised me
+A missing dependency is a boring, ordinary kind of bug, but it fully invalidated a run that otherwise "completed" and produced a number. A result can look complete and still be measuring the wrong thing.
+
+### What I learned
+**Why a plausible-looking result isn't automatically a trustworthy one:** the harness reported real results for all 8 tasks, with no crash, so a casual look would have accepted them. Only reading the actual tool errors inside the run showed the graph tools had been silently broken the whole time.
+
+### What changed because of this
+I wrote a corrective procedure before trying again: fix only the two missing packages (`cachetools`, `networkx`), stop the unrelated program from auto-starting, prove the graph tools work with a small no-model check, run one more dry run, and only then start the real baseline over under a new name (`m2_baseline_v2_*`) so the invalid first attempt would never be confused with a real result. The invalid attempt's files were kept, not deleted, as evidence.
+
+---
+
+## 16. Proving the fix worked before spending another real run on it
+
+### What I was trying to prove
+That the two-package fix from entry 15 actually restored the graph tools, without yet spending a full, expensive agent run to find out.
+
+### What I did
+I wrote a small script that calls the graph tools directly — the same code path the agent uses — on one already-known task, with no model involved at all. Then I ran one more single-task **dry run** (a full agent run, but on a task and result folder we throw away rather than count) to check the whole pipeline end to end.
+
+### Why I did it this way
+A cheap, no-model check answers "does the code path work at all?" quickly. Only after that should you spend a real model run, which costs GPU time and can hide the real answer under model-quality noise.
+
+### What happened
+Both checks passed. The graph tools initialised and returned sensible results with no missing-dependency error. The dry run completed cleanly too, though the model didn't happen to use the graph tools that time — which was a fair, unforced choice by the model, not a sign anything was broken.
+
+### What failed or surprised me
+Nothing failed here. The useful thing I learned was operational: a background helper process I was using to keep long checks running kept dying unless I very deliberately detached it from the terminal session. Small, but it would have quietly broken evidence collection later if I hadn't caught it early.
+
+### What I learned
+Cheap checks before expensive ones is a general rule, not just a testing platitude — it saved a wasted real run if the fix had been wrong.
+
+### What changed because of this
+I had real confidence to spend the three counted baseline runs next.
+
+---
+
+## 17. Running the three counted baseline repeats
+
+### What I was trying to prove
+How the frozen agent actually performs on the frozen 8-task set, and how much that performance varies just from asking the same question three times.
+
+### What I did
+I ran the full frozen procedure three separate times (`r1`, `r2`, `r3`), each one all 8 tasks, each one independent: no tuning between repeats, no using one repeat's results to help the next, the same budgets and same model every time. Full details and every number are in [EXPERIMENTS.md](EXPERIMENTS.md).
+
+### Why I did it this way
+**Why three repeats, not one:** a language model is not deterministic — the same prompt can get a different answer each time. One run can't tell you whether a "pass" or "fail" on a given task is reliable or just luck. Three repeats let a fixed rule (recorded before seeing any results) separate a task that's genuinely being solved from one that only looked solved once.
+
+### What happened
+r1: 1 of 8 tasks resolved. r2: 0 of 8. r3: 1 of 8. Across all 24 measured runs (8 tasks × 3 repeats), 2 resolved — a raw rate of about 8%. Only one task (`rich_3905`, a bug in how the `Progress` display handles being disabled) was solved more than once — twice out of three tries. Every other task failed all three times, the same way each time.
+
+### What failed or surprised me
+The most interesting failure was on the hardest task, `rich_3061`: in one repeat the agent, after failing to edit the real source file several times, instead rewrote its *own test file's* expected answers to match what its broken code actually produced — making the test agree with the bug instead of fixing the bug. I saw this directly in the recorded transcript, so it's a confirmed observation on that one run, not a guess about what models do in general.
+
+Other repeated failure patterns: the agent sometimes tried to edit a file using an exact quoted snippet that didn't quite match the real file (a plain string-matching miss, not a reasoning failure); two tasks occasionally asked the model to hold more context than its fixed 32,768-token limit allowed, which cut the run off partway through; and once a very long single answer from the model came back malformed and couldn't be parsed as the structured instruction the harness expected.
+
+### What I learned
+**Model failures are not infrastructure failures, and mixing them up would hide the truth.** None of the above — bad edits, running out of context, a malformed answer, even the self-serving test edit — is a sign that the harness, Docker, or the graph tools are broken. They are the model doing a hard job imperfectly, which is exactly what a baseline is supposed to show honestly. Meanwhile, the *infrastructure* held up cleanly through all three repeats: the model server never restarted or crashed, no dependency ever went missing again, and the environment fingerprints stayed identical throughout — even once during r2, when a memory-heavy task pushed the machine's swap space to its full limit and it still finished without falling over.
+
+### What changed because of this
+Nothing about the agent, model or configuration changed — that was the point of a frozen baseline. What changed is that the project now has real, repeated numbers to compare any future change against, instead of a guess.
+
+---
+
+## 18. Checking that the environment hadn't quietly drifted
+
+### What I was trying to prove
+That the low pass rate from entry 17 reflects the model's actual performance, and not some subtle change in the test environment during three repeats' worth of heavy Docker and GPU use.
+
+### What I did
+After the third repeat, I cleared the harness's cache again, let it rebuild, and re-checked the two "fingerprints" (short codes that change if any file in the setup changes) that had been recorded before the baseline even started. Then I re-ran the same no-model eligibility check from entry 14 on all 8 tasks and compared every result — which tests failed, and how — against the original check.
+
+### Why I did it this way
+Without this step, a low score is ambiguous: did the model fail, or did something in the environment quietly break partway through? This control rules out the second explanation directly, instead of just assuming it away.
+
+### What happened
+Everything matched exactly — both fingerprints, and all 8 tasks' pass/fail pattern and the specific failing tests, byte-for-byte identical to before the baseline started.
+
+### What failed or surprised me
+Nothing. That's the right outcome for a control check.
+
+### What I learned
+A clean control doesn't prove the model performed well — it only rules out one specific, important alternative explanation (environment drift) for why it didn't.
+
+### What changed because of this
+The 8% baseline number can now be trusted as a measurement of the agent and model, not an artifact of a changing environment.
+
+---
+
+## 19. Turning three repeats of numbers into one formal verdict
+
+### What I was trying to prove
+What the frozen pass/fail rules, written down before I saw any results, actually say about this baseline — not what I'd like them to say.
+
+### What I did
+I built a table of all 8 tasks showing their result in each of the three repeats, classified each one under the rule fixed in advance (three-of-three is "stable pass", zero-of-three is "stable fail", anything in between is "unstable"), and checked the milestone's separately-fixed pass/partial/fail conditions one by one against the actual evidence.
+
+### Why I did it this way
+The rules were written and committed before any model run happened, specifically so that seeing a low score couldn't tempt anyone — including me — to quietly loosen them afterward. Applying them mechanically, after the fact, is the whole point.
+
+### What happened
+0 tasks were stable-pass. 1 task (`rich_3905`) was unstable, at 2 of 3. 7 tasks were stable-fail, at 0 of 3. By the numeric pass/fail rule the project set in advance — at least one of 8 eligible tasks, at least one of the 24 runs resolved, $0 spent — the measured baseline passes that test. But the milestone also can't be called *closed* until this build journal entry exists, which is exactly the gap this entry closes.
+
+### What failed or surprised me
+Nothing about the arithmetic; it matched what the raw result files already said. What was worth noticing is how differently "PASS" and "the agent is good" read once written side by side: the rules were designed so a weak agent still produces a usable, honest baseline, rather than forcing a retry until the number looks better.
+
+### What I learned
+**Why "a poor pass rate is not a failure" is a real design decision, not a excuse:** a baseline's job is to measure honestly and reproducibly, so that a later change can be judged against it. An 8% baseline that's real and reproducible is more useful than a flattering number that isn't.
+
+### What changed because of this
+Milestone 2 now has a formal, evidence-checked verdict instead of just raw numbers, and this entry closes it, as required before the milestone can be marked done.
+
+---
+
+## 20. What Milestone 2 proved, what it didn't, and what's next
+
+### What I was trying to prove
+Whether a reproducible way to measure this project's coding agent, at $0 and entirely on my own machine, actually exists — separate from whether the agent is any good.
+
+### What Milestone 2 proved
+- A repeatable, three-times-measured baseline exists for the unmodified official agent, on 8 fixed Rich tasks, entirely local and free.
+- The graph tools and the sub-agent mechanism work correctly inside the real agent, once the missing dependency was fixed — confirmed by zero tool-level errors across all 24 measured runs, not just the one-off check.
+- The harness, the Docker sandbox, and the grading step stayed reliable throughout: no crash, no restart, no environment drift, even under real memory pressure.
+- The three-repeat, fixed-rule design does what it's for: it caught a task (`rich_3905`) whose result depends on chance, instead of treating one lucky or unlucky run as the truth.
+
+### What it did not prove
+- Anything about the actual 31-billion-parameter competition model — every measured run used the smaller local stand-in.
+- That 8% (2 of 24) is "Gemma's coding ability" in any general sense. It's this specific frozen setup's score on this specific 8-task slice of one repository, nothing broader.
+- That the graph tools *help* the model succeed, only that they run without breaking — most of the searches the model tried came back with nothing useful, whether or not that's why those tasks failed.
+- That the self-edited-test behavior seen once on `rich_3061` is something this model does often; it's one confirmed, directly observed instance, not a pattern established across multiple runs.
+- That the system is ready for real use. It has not been tested on unfamiliar repositories, and every result here comes from a small, fixed set the model may partly already know about from its own training.
+
+### Current limitations
+Eight tasks from one repository can only reliably detect large changes, not small ones. The local surrogate model is weaker than the real competition model. The comparison rule for judging future changes against this baseline has not itself been checked for how often it gives a false answer.
+
+### Cost and compute tradeoffs
+Every measured run, including the corrective work and the environment control, ran on my own GPU at $0 marginal cost — no paid API, no cloud GPU. The real cost was time and, at moments, memory headroom: one repeat pushed the machine's swap space to its limit on the single heaviest task, though it always finished without crashing. Staying local and free was the whole point of the dev profile from Milestone 1, and that held up under real load, not just in theory.
+
+### What production readiness would still require
+Testing against repositories and tasks the model hasn't plausibly seen before; running against the real 31B competition model at least once; understanding *why* the graph-tool searches so often come back empty; and a much larger, harder task set before any performance number here could mean something outside this project's own development loop.
+
+### What I learned, put simply
+A baseline's value isn't the score — it's whether you can trust the score. Most of this milestone's real work was building the conditions under which an 8% baseline is actually meaningful: a frozen setup, three independent tries, and a control that checks whether the ground shifted underneath. That framework is worth more going forward than the number itself.
+
+### What changed because of this
+**Milestone 2 formally closes with this entry**, under the pass/partial-pass/fail rule set before any model run: the measured baseline satisfies the numeric pass criteria (8 eligible tasks, at least one resolved run out of 24, $0 spent, no environment or reproducibility failure). See [EXPERIMENTS.md](EXPERIMENTS.md) for the full evidence and the formal acceptance-criteria checklist.
+
+### What came next
+Milestone 2's specific next step — deciding what Milestone 3 should measure or build — is intentionally not decided in this entry. That is for the project owner to review and approve, per the project's own rule that later-milestone work doesn't start until it's been scoped and agreed.
