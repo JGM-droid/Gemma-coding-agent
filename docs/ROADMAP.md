@@ -292,13 +292,13 @@ WI-3.1 is documentation/codebook only:
 - No Milestone 4 work.
 - No new planning documents beyond this roadmap section.
 
-### Work items (WI-3.1 through WI-3.4 complete; WI-3.5 onward not yet started)
+### Work items (WI-3.1 through WI-3.5 complete; WI-3.6 onward not yet started)
 
 - **WI-3.1: Establish the milestone.** Complete. Froze the codebook, defined signals and evaluation design, defined acceptance criteria, defined script governance. Documentation only.
 - **WI-3.2: Deterministic signal-extraction script.** Complete. `scripts/m3_extract_signals.py`, per the governance frozen in WI-3.1. See [EXPERIMENTS.md](EXPERIMENTS.md).
 - **WI-3.3: Label all 24 counted runs.** Complete. Applied the frozen codebook to all 24 counted runs (22 failures labelled, 2 `rich_3905` runs recorded as resolved contrast cases); every label cites its supporting raw artifact. See [EXPERIMENTS.md](EXPERIMENTS.md).
 - **WI-3.4: Project-owner spot-check of a bounded sample of labels.** Complete. The project owner reviewed the 4-run bounded sample proposed in WI-3.3 (`r1/rich_3905`, `r3/rich_4079`, `r2/rich_3470`, `r1/rich_3470`) and recorded explicit agreement with all 4 proposed classifications, outside the repository. See [EXPERIMENTS.md](EXPERIMENTS.md) for the recorded owner-review statement. AC3-6 is now satisfied for this bounded sample.
-- **WI-3.5 (future):** Competition-budget compatibility analysis — compare the frozen local dev budgets (30 tool calls / 20 min / 300 s) against the sample submission's own Kaggle budgets (`eval_config.yaml`: 10 calls / 1 min / 50 turns / 60 s, ignored by the local CLI) in light of the labelled failure modes, particularly the tool-call-budget and context-budget categories.
+- **WI-3.5: Competition-budget compatibility analysis.** Complete. Compared the frozen local dev budgets (30 tool calls / 20 min / 300 s) against the sample submission's own Kaggle budgets (`kaggle_data/sample_submission/eval_config.yaml`: 10 calls / 1 min / 50 turns / 60 s, ignored by the local CLI) using the 24 counted runs' frozen artifacts. See [EXPERIMENTS.md](EXPERIMENTS.md) for the full per-run compatibility table, aggregate counts, and the explicit boundary between observed fact and unmeasured counterfactual. AC3-8 is now satisfied.
 - **WI-3.6 (future):** Synthesize the labelled evidence; pre-register secondary process metrics for a later intervention experiment; select exactly one evidence-backed next-intervention hypothesis, or conclude explicitly that the evidence is insufficient to select one.
 - **WI-3.7 (future):** Close — build journal entry, ROADMAP update.
 
@@ -371,7 +371,7 @@ Edit-mechanics failures (category 3) are recorded as an observed contributing fa
 - **AC3-11:** $0 spend throughout.
 - **AC3-12:** a build-journal closure entry is written when the milestone closes.
 
-None of AC3-2 through AC3-12 was satisfied by WI-3.1; this work item establishes the criteria and the codebook only. **Status update (WI-3.3/WI-3.4, recorded here for traceability; full evidence in EXPERIMENTS.md):** AC3-2 (all 24 runs labelled/undetermined), AC3-3 (reproducible deterministic extraction, from WI-3.2), AC3-4 (raw evidence under `results/` unchanged, re-verified), AC3-5 (every label cites raw-artifact evidence), AC3-6 (owner spot-check — the project owner reviewed the 4-run bounded sample proposed in WI-3.3 and agreed with all 4 classifications, recorded in WI-3.4), and AC3-7 (all context-involved failures received explicit treatment) are now satisfied. AC3-8 (budget-compatibility analysis), AC3-9 (secondary-metric pre-registration), AC3-10 (intervention hypothesis or explicit insufficiency conclusion), and AC3-12 (build-journal closure entry) remain **not yet satisfied**. AC3-11 ($0 spend) holds throughout.
+None of AC3-2 through AC3-12 was satisfied by WI-3.1; this work item establishes the criteria and the codebook only. **Status update (WI-3.3/WI-3.4/WI-3.5, recorded here for traceability; full evidence in EXPERIMENTS.md):** AC3-2 (all 24 runs labelled/undetermined), AC3-3 (reproducible deterministic extraction, from WI-3.2), AC3-4 (raw evidence under `results/` unchanged, re-verified), AC3-5 (every label cites raw-artifact evidence), AC3-6 (owner spot-check — the project owner reviewed the 4-run bounded sample proposed in WI-3.3 and agreed with all 4 classifications, recorded in WI-3.4), AC3-7 (all context-involved failures received explicit treatment), and AC3-8 (competition-budget compatibility analysis, WI-3.5) are now satisfied. AC3-9 (secondary-metric pre-registration), AC3-10 (intervention hypothesis or explicit insufficiency conclusion), and AC3-12 (build-journal closure entry) remain **not yet satisfied**. AC3-11 ($0 spend) holds throughout.
 
 ### Analysis script governance (defined now; **not implemented** in WI-3.1)
 

@@ -1378,3 +1378,112 @@ The following 4 runs are proposed as a bounded, contrast-oriented spot-check sam
 **UNPROVEN**
 - Whether the owner's agreement on this 4-run sample would generalize to the other 20 counted runs — not claimed, and out of scope for a bounded spot-check by design.
 - All underlying/root-cause attributions remain exactly as undetermined as WI-3.3 left them; this entry changes no root-cause conclusion.
+
+---
+
+### Experiment: WI-3.5, competition-budget compatibility analysis
+
+**Goal:** satisfy AC3-8 by comparing the frozen local development-profile budgets against the sample submission's Kaggle/competition-oriented budgets, using only the 24 counted runs' already-frozen artifacts. This is retrospective analysis of completed runs, **not** a new benchmark experiment: the 24 counted runs were executed under the local development budgets, not under competition-budget enforcement, so this analysis reports what the frozen artifacts show, not what would have happened under a different, unmeasured budget regime.
+
+**A. Budget profiles, confirmed from repository authority:**
+
+*Frozen local development profile* (`docs/EVALUATION.md`, "Run budgets", and `docs/ROADMAP.md` D6 — matches exactly, no discrepancy found):
+- max tool calls: 30 (`--max-tool-calls 30`)
+- max time: 20 minutes (`--max-time-minutes 20`)
+- command timeout: 300 seconds (`--timeout-seconds 300`)
+- `--max-turns` omitted; harness falls back internally to a 500-LLM-call limit.
+
+*Sample submission's Kaggle/competition-oriented profile*, read directly from `kaggle_data/sample_submission/eval_config.yaml` (the authoritative file `docs/ROADMAP.md`/`docs/EVALUATION.md` reference, re-read for this work item rather than assumed from the prompt):
+```yaml
+evaluation:
+  timeout_seconds: 60
+  max_tool_calls: 10
+  max_time_minutes: 1
+  max_turns: 50
+```
+This matches, field-for-field, the numbers already cited in `docs/ROADMAP.md`'s WI-3.5 bullet and D6 ("10 calls, 1 min, 50 turns, 60 s"). No discrepancy was found between the prompt's stated values and the repository's authoritative source. Per D6/`docs/EVALUATION.md`, this Kaggle profile is **ignored by the local CLI** — the 24 counted runs ran only under the local development profile above; the Kaggle profile was never enforced during Milestone 2.
+
+**Data sources used (read-only, no script modified):**
+- `scripts/m3_extract_signals.py`, re-run unmodified (see verification below) for `submit_patch_called`, `submit_patch_tool_call_index`, `submit_patch_within_10_tool_calls` (already computed by the retained WI-3.2 extractor against exactly this 10-call threshold, per `docs/EXPERIMENTS.md`'s WI-3.2 entry), `total_tool_calls_recorded_in_trace`, `context_window_exceeded_error`.
+- `results/m2_baseline_v2_r{1,2,3}/task_results.jsonl`'s raw `duration_seconds` and `total_llm_calls` fields, read directly (no computation needed — these are frozen top-level fields already present in the counted evidence, the same file the extractor itself reads).
+- `results/m2_baseline_v2_r{1,2,3}/traces/trace_<task>.json`'s per-tool-call `extra.elapsed_s` field, inspected (not extracted into a persisted artifact) to test whether it could answer the 60-second command-timeout question — see §D.
+
+No change to `scripts/m3_extract_signals.py` was needed: every fact below is either already computed by the retained extractor or a single frozen field read directly from `task_results.jsonl`, so per the WI-3.5 governance ("prefer documentation-only changes" when all facts can be derived without changing the script), no script extension was made.
+
+**B. Per-run compatibility table (all 24 counted runs)**
+
+Evidence for every row: `results/m2_baseline_v2_<repeat>/task_results.jsonl` (`resolved`, `tool_calls`, `total_llm_calls`, `duration_seconds`) and `results/m2_baseline_v2_<repeat>/traces/trace_<task_id>.json` (tool-call sequence, `submit_patch` index). WI-3.3 label column repeats the terminal classification already committed in this file's WI-3.3 section (unchanged, not re-derived here).
+
+| Repeat | Task | Resolved | Tool calls (trace) | `submit_patch`? | Submit idx | Within first 10 calls? | Duration (s) | Context-budget status | WI-3.3 primary label |
+|---|---|---|---|---|---|---|---|---|---|
+| r1 | rich_3061 | false | 22 | no | — | n/a | 375.83 | no | Malformed output (undetermined-cause) |
+| r1 | rich_3130 | false | 35 | yes | 35 | **no** | 215.55 | no | Tool-call budget exhaustion |
+| r1 | rich_3278 | false | 22 | yes | 22 | **no** | 147.10 | no | Submission failure/empty patch |
+| r1 | rich_3470 | false | 23 | yes | 23 | **no** | 173.63 | no | Diagnosis/incorrect fix |
+| r1 | rich_3894 | false | 8 | yes | 8 | **yes** | 55.77 | no | Diagnosis/incorrect fix |
+| r1 | rich_3905 | **true** | 8 | yes | 8 | **yes** | 48.91 | no | (resolved contrast) |
+| r1 | rich_4076 | false | 14 | yes | 14 | **no** | 88.07 | no | Diagnosis/incorrect fix + localization |
+| r1 | rich_4079 | false | 11 | yes | 11 | **no** | 89.47 | no | Diagnosis/incorrect fix + localization |
+| r2 | rich_3061 | false | 35 | no | — | n/a | 216.42 | no | Tool-call budget exhaustion |
+| r2 | rich_3130 | false | 15 | no | — | n/a | 96.98 | **yes** (44,651 tok) | Context budget/pressure |
+| r2 | rich_3278 | false | 18 | yes | 18 | **no** | 143.30 | no | Diagnosis/incorrect fix |
+| r2 | rich_3470 | false | 29 | yes | 29 | **no** | 171.92 | no | Submission failure/empty patch |
+| r2 | rich_3894 | false | 6 | yes | 6 | **yes** | 51.97 | no | Diagnosis/incorrect fix |
+| r2 | rich_3905 | false | 20 | yes | 20 | **no** | 149.60 | no | Diagnosis/incorrect fix |
+| r2 | rich_4076 | false | 27 | yes | 27 | **no** | 185.98 | no | Submission failure/empty patch + localization |
+| r2 | rich_4079 | false | 20 | no | — | n/a | 151.28 | **yes** (33,378 tok) | Context budget/pressure |
+| r3 | rich_3061 | false | 27 | no | — | n/a | 285.30 | no | Malformed output (undetermined-cause) |
+| r3 | rich_3130 | false | 28 | no | — | n/a | 154.52 | **yes** (32,866 tok) | Context budget/pressure |
+| r3 | rich_3278 | false | 27 | yes | 27 | **no** | 201.18 | no | Diagnosis/incorrect fix + localization |
+| r3 | rich_3470 | false | 15 | yes | 15 | **no** | 124.84 | no | Submission failure/empty patch |
+| r3 | rich_3894 | false | 5 | yes | 5 | **yes** | 59.44 | no | Diagnosis/incorrect fix |
+| r3 | rich_3905 | **true** | 19 | yes | 19 | **no** | 120.38 | no | (resolved contrast) |
+| r3 | rich_4076 | false | 10 | yes | 10 | **yes** | 99.14 | no | Diagnosis/incorrect fix + localization |
+| r3 | rich_4079 | false | 25 | no | — | n/a | 211.08 | **yes** (46,447 tok) | Context budget/pressure |
+
+**C. Aggregate descriptive counts (10-tool-call competition-oriented limit)**
+
+- **5 of 24 runs** submitted within the first 10 tool calls (`submit_patch_within_10_tool_calls: true`, per the WI-3.2 extractor's own field, already computed against this exact threshold): `r1/rich_3894` (idx 8), `r1/rich_3905` (idx 8), `r2/rich_3894` (idx 6), `r3/rich_3894` (idx 5), `r3/rich_4076` (idx 10).
+- **Of the 2 resolved runs:** `r1/rich_3905` submitted within the first 10 tool calls (idx 8); `r3/rich_3905` did **not** (idx 19). So **1 of 2** resolved runs submitted within 10 tool calls.
+- **19 of 24 runs recorded more than 10 tool calls in the trace** (`total_tool_calls_recorded_in_trace` > 10). Using the harness's own separately-reported `tool_calls` count instead (a distinct field the extractor also records, not always identical to the trace-recorded count — see note below), the same count is **18 of 24** — the one discrepancy is `r1/rich_4079`, where the trace-recorded count is 11 (>10) but the harness-reported count is exactly 10 (not >10). This single-run boundary discrepancy is recorded rather than resolved in either direction; it does not change any other run's classification.
+- **Relationship to the already-labelled tool-call-budget and context-budget failures:** all 6 runs whose WI-3.3 terminal label is itself a resource-exhaustion category — the 2 tool-call-budget-exhaustion runs (`r1/rich_3130`: 35 trace tool calls; `r2/rich_3061`: 35) and the 4 context-budget-pressure runs (`r2/rich_3130`: 15; `r2/rich_4079`: 20; `r3/rich_3130`: 28; `r3/rich_4079`: 25) — had already recorded more than 10 tool calls in the trace by the time of (or well before) their terminal event. This is a directly observed fact (category 1 in the analytical boundary above): under the local development budget that was actually enforced, these 6 runs' process had already passed the point a 10-call Kaggle-profile cap would have cut off. It is **not** evidence about what these runs (or the model generally) would have produced *if* a 10-call cap had actually been enforced during generation — the model might have submitted earlier, submitted a different (possibly worse or better) patch, or behaved differently under real-time budget pressure it never experienced. That counterfactual is explicitly unmeasured (category 3, excluded per the analytical boundary).
+
+**D. The 1-minute / 60-second-command / 50-turn dimensions**
+
+- **1-minute (`max_time_minutes: 1`) wall-time dimension — directly measurable.** `duration_seconds` is a frozen, unambiguous top-level field in every `task_results.jsonl` record. **4 of 24 runs** completed in under 60 seconds of total wall time: `r1/rich_3894` (55.77 s), `r1/rich_3905` (48.91 s), `r2/rich_3894` (51.97 s), `r3/rich_3894` (59.44 s) — notably, all 3 repeats of `rich_3894` plus the faster of the two resolved `rich_3905` runs. The other 20 of 24 runs took longer than 60 seconds of total wall time (up to 375.83 s, `r1/rich_3061`).
+- **60-second command-timeout (`timeout_seconds: 60`) dimension — indeterminate from the frozen artifacts.** The trace's per-tool-call `extra.elapsed_s` field was inspected as a candidate source. Direct inspection (`r1/rich_3894`, an 8-tool-call run) shows `elapsed_s` values of 10.36, 13.44, 14.66, 15.83, 30.06, 32.58, 33.45, 41.68 across its 8 successive tool calls — **monotonically increasing**, confirming this field records cumulative elapsed time since the run started, not each individual sandboxed command's own execution duration. (This is corroborated by `submit_patch` — a trivial, near-instantaneous call — showing `elapsed_s` values as high as 254.87 s in some runs, e.g. `r3/rich_3061`, which is only explicable as cumulative run time, not that call's own duration.) Because no field in the frozen artifacts isolates an individual sandboxed command's own execution time from the model's inference latency preceding it, **whether any individual command in any of the 24 runs would have exceeded Kaggle's 60-second per-command timeout is indeterminate** from this evidence — not measured false, not measured true.
+- **50-turn (`max_turns: 50`) dimension — partial, via a documented proxy.** No field literally named "turns" is recorded per run. `total_llm_calls` (a frozen `task_results.jsonl` field) is used as a proxy, on the basis that `docs/ROADMAP.md` D6 itself equates the harness's turn concept with LLM-call count ("`--max-turns` is omitted... the harness then falls back internally to a limit of **500 LLM calls**"). Under that proxy, **all 24 runs** recorded `total_llm_calls` well under 50 (range: 6–39; maximum is `r2/rich_3061` at 39). This is reported as a **partial** finding: it is well-supported that no run came anywhere close to a 50-turn-equivalent cap under this proxy, but whether the harness's literal `--max-turns` counting mechanism is identical to `total_llm_calls` in every edge case (e.g., retried or malformed generations) is not independently verified here, so exact numeric equivalence is not claimed as certain.
+
+**E. What this analysis establishes and does not establish**
+
+**Establishes:**
+- Under the local development profile that was actually enforced, most counted runs (19 of 24, or 18 of 24 by the harness's own count) had already recorded more tool calls than the Kaggle profile's 10-call limit; only 5 of 24 runs (including 1 of the 2 resolved runs) completed within that many calls.
+- All 6 runs whose WI-3.3 terminal label is a resource-exhaustion category (tool-call-budget or context-budget) had already exceeded 10 recorded tool calls before their terminal event.
+- Only 4 of 24 runs completed within Kaggle's 60-second total wall-time budget; the great majority took substantially longer under the local profile's much larger 20-minute allowance.
+- No run's `total_llm_calls` approached the 50-turn-equivalent proxy.
+
+**Does NOT establish, and is explicitly not claimed:**
+- That any run over 10 tool calls **necessarily would have failed** under actual competition-budget enforcement — the local runs were never cut off at 10 calls, so what the model would have submitted if forced to stop there is unmeasured.
+- That the 5 runs (including `r1/rich_3905`) that happened to submit within 10 calls **necessarily would have resolved** under the full competition budget profile (60 s/command, 1 min total, 50 turns) — only the tool-call dimension was within budget for these runs; the wall-time dimension was checked separately (§D) and does not uniformly align with the same 5 runs (e.g., `r3/rich_4076` submitted within 10 calls but took 99.14 s, over the 60 s Kaggle wall-time budget).
+- That the local development profile reproduces Kaggle execution conditions — it does not: local wall-clock timings reflect this specific machine's GPU-bound llama.cpp inference speed, not the competition's execution environment, and the 60-second command-timeout dimension could not even be measured from the frozen artifacts (§D).
+- That budget incompatibility is the root cause of the observed baseline's low resolution rate — this analysis is descriptive/comparative only; it does not assign or revise any root-cause attribution, all of which remain exactly as undetermined as WI-3.3 left them.
+
+**F. AC3-8 status**
+
+AC3-8's exact frozen wording is: *"a competition-budget compatibility analysis is performed."* This work item performs exactly that analysis — confirming both budget profiles from repository authority, producing the required per-run compatibility table and aggregate counts, and explicitly distinguishing observed fact from unmeasured counterfactual throughout. **AC3-8 is satisfied.**
+
+**VERIFIED**
+- Both budget profiles (local development and Kaggle/competition-oriented) confirmed directly from `docs/EVALUATION.md`, `docs/ROADMAP.md`, and `kaggle_data/sample_submission/eval_config.yaml`; no discrepancy from the prompt's stated values was found.
+- Extractor re-run (`scripts/m3_extract_signals.py`, unmodified) reproduces `counted_run_count: 24`, `{"r1": 8, "r2": 8, "r3": 8}`, 2 resolved (`rich_3905` r1/r3) — matching every prior work item.
+- All 24 rows in the compatibility table (§B) are traceable to specific `task_results.jsonl` fields and trace tool-call indices.
+- The 5-of-24 (within-10-calls) and 4-of-24 (under-60s) counts were independently recomputed from the raw per-run data and agree with the table in §B.
+- `results/m2_baseline_v2_r{1,2,3}/` (83 files) and `kaggle_data/tasks.jsonl` are byte-identical before and after this work item (hashes recomputed and diffed).
+
+**PARTIAL / INDETERMINATE**
+- The 60-second command-timeout dimension: indeterminate — no frozen field isolates individual command execution time from cumulative run time (§D).
+- The 50-turn dimension: partial — `total_llm_calls` is used as a documented proxy, not a literally-named "turns" field; exact equivalence to the harness's own turn-counting mechanism is not independently verified.
+- The single tool-call-count discrepancy between the trace-recorded and harness-reported totals for `r1/rich_4079` (11 vs. 10) — recorded, not resolved in either direction.
+
+**UNPROVEN**
+- Any counterfactual claim about run outcomes under actual competition-budget enforcement (per the explicit exclusions in §E) — not claimed anywhere in this analysis.
+- That budget incompatibility is a/the root cause of the Milestone 2 baseline's low resolution rate — not claimed; root-cause attribution remains undetermined for all 22 failures, unchanged from WI-3.3.
