@@ -1218,3 +1218,128 @@ python3 scripts/m3_extract_signals.py -o <output-path-outside-results/>
 **UNPROVEN**
 - Nothing about why any run failed. This work item extracts objective facts only; no failure-attribution-codebook label has been assigned to any of the 24 runs, and none is claimed here.
 - Whether the malformed-output context-boundary question could be answered by some other means (e.g., re-instrumenting a future run to persist server-side token logs); out of scope for WI-3.2, which works only with the already-frozen, unmodified evidence.
+
+---
+
+### Experiment: WI-3.3, attribution labelling of the 24 counted runs
+
+**Goal:** apply the WI-3.1 frozen failure-attribution codebook (`docs/ROADMAP.md`, "The failure-attribution codebook") to all 24 counted Milestone 2 runs, using the WI-3.2 deterministic signal extraction plus minimum-necessary direct inspection of the frozen trace evidence. This work item labels; it does not re-derive the codebook and does not select a Milestone 4 intervention.
+
+**Extractor re-verification (first step, before labelling):**
+- Re-hashed all 84 frozen input files (`results/m2_baseline_v2_r{1,2,3}/` — 83 files — plus `kaggle_data/tasks.jsonl`) before running `scripts/m3_extract_signals.py`.
+- Ran the unmodified script twice: `python scripts/m3_extract_signals.py -o <scratch>/m3_signals_run{1,2}.json`. Both outputs are byte-identical (same SHA-256, `diff` empty).
+- Result: `counted_run_count: 24`, `{"r1": 8, "r2": 8, "r3": 8}`, 2 resolved runs (`r1/rich_3905`, `r3/rich_3905`) — matches the WI-3.2 record exactly. No discrepancy found; the extractor was not modified.
+- Re-hashed all 84 input files after both runs: identical to the pre-run hashes. The extractor remains read-only with respect to `results/` and `kaggle_data/`.
+
+**Attribution procedure:** for each of the 24 runs, the extracted record was read first, then the minimum additional raw evidence (trace `tool_calls`/`observation` sequence, `reported_error_text`, patch presence) needed to apply the frozen precedence order (`docs/ROADMAP.md`, "Precedence order for terminal-mechanism assignment"). Every terminal label below cites the specific extracted field(s) and/or trace tool-call indices that support it. `rich_3905`'s two resolved runs (r1, r3) are recorded as contrast cases, never as failures.
+
+#### A. 24-run attribution table
+
+Evidence column cites `results/m2_baseline_v2_<repeat>/...` paths (repeat-specific `task_results.jsonl` and `traces/trace_<task_id>.json`, omitted below for brevity — every row's evidence lives at that pattern) plus the specific field/index that decided the label.
+
+| Repeat | Task | Resolved | Terminal (primary) label | Secondary observed mechanisms | Evidence | Underlying/root-cause |
+|---|---|---|---|---|---|---|
+| r1 | rich_3061 | false | **Malformed/truncated output** (cat. 6, undetermined-cause) | FileEditError ×2 (tool-call idx 20, 21) — contributing, not terminal | `reported_error_text`="Sandbox execution error: Unterminated string..."; `malformed_output_context_boundary_evidence`="insufficient_artifact_data"; last complete step (28) at 19,016 prompt tokens, well under 32,768 | undetermined |
+| r1 | rich_3130 | false | **Tool-call budget exhaustion** (cat. 5) | Submission attempted after cap, resulted empty (cat. 8 signal, superseded) | `total_tool_calls_reported_by_harness`=30 (=frozen cap); `BudgetExceeded` events at trace idx 33, 34; `submit_patch` at idx 35 with `submitted_patch_empty`=true | undetermined |
+| r1 | rich_3278 | false | **Submission failure / empty patch** (cat. 8) | Edit mechanics: 4 `FileEditError` (idx 13, 16, 17, 19) immediately preceding `submit_patch` at idx 22 — causal | `submitted_patch_empty`=true; `file_edit_error_tool_call_indices`=[13,16,17,19]; `submit_patch_tool_call_index`=22 | undetermined |
+| r1 | rich_3470 | false | **Diagnosis / incorrect fix** (cat. 2) | none | non-empty patch submitted idx 23; `phase2_test_exit_code`=1 (assertion fail); `gold_target_file_read`/`_edited`=true | undetermined — conservative per Milestone 3 instructions; not generalized to model capability |
+| r1 | rich_3894 | false | **Diagnosis / incorrect fix** (cat. 2) | none | non-empty patch idx 8; `phase2_test_exit_code`=1; target file read+edited | undetermined |
+| r1 | rich_3905 | **true** | contrast case (not labelled) | fee=0, target test run before submission | non-empty patch idx 8; `phase2_test_exit_code`=0 | n/a |
+| r1 | rich_4076 | false | **Diagnosis / incorrect fix** (cat. 2), qualified by **localization failure** (cat. 1) | none | non-empty patch idx 14; `phase2_test_exit_code`=1; `gold_target_file_read`=`_edited`=false (patch touched a different file) | undetermined |
+| r1 | rich_4079 | false | **Diagnosis / incorrect fix** (cat. 2), qualified by **localization failure** (cat. 1) | none | non-empty patch idx 11; `phase2_test_exit_code`=1; `gold_target_file_read`=`_edited`=false | undetermined |
+| r2 | rich_3061 | false | **Tool-call budget exhaustion** (cat. 5) | Target file read but never edited (partial, not strict localization) | `reported_error_text`="Agent exceeded tool call budget (30 calls)"; `total_tool_calls_reported_by_harness`=30; `BudgetExceeded` idx 35; no `submit_patch` call | undetermined |
+| r2 | rich_3130 | false | **Context budget / pressure** (cat. 4) | Localization: `gold_target_file_read`/`_edited`=false | `context_window_exceeded_error`=true, reported tokens=44,651; last complete step (17) at 22,395 prompt tokens | undetermined — whether growth stemmed from model verbosity, workflow/tool-output accumulation, or the local 32K profile is the open Milestone 3 question, not resolved here |
+| r2 | rich_3278 | false | **Diagnosis / incorrect fix** (cat. 2) | Edit mechanics: 5 `FileEditError` (idx 7,9,11,12,13) — contributing, non-empty patch still submitted | non-empty patch idx 18; `phase2_test_exit_code`=1; target file read+edited | undetermined |
+| r2 | rich_3470 | false | **Submission failure / empty patch** (cat. 8) | Edit mechanics: 3 `FileEditError` (idx 15,17,28) immediately preceding `submit_patch` idx 29 — causal | `submitted_patch_empty`=true; target file read+edited | undetermined |
+| r2 | rich_3894 | false | **Diagnosis / incorrect fix** (cat. 2) | none | non-empty patch idx 6; `phase2_test_exit_code`=1; target file read+edited | undetermined |
+| r2 | rich_3905 | false | **Diagnosis / incorrect fix** (cat. 2) | `target_test_run`=false — unlike this task's two resolved repeats, where it is true (cross-repeat verification-behavior difference, recorded not asserted as cause) | non-empty patch idx 20; `phase2_test_exit_code`=1; target file read+edited | undetermined |
+| r2 | rich_4076 | false | **Submission failure / empty patch** (cat. 8), qualified by **localization failure** (cat. 1) | Edit mechanics: 2 `FileEditError` (idx 16,26) immediately preceding `submit_patch` idx 27 — causal | `submitted_patch_empty`=true; `gold_target_file_read`=`_edited`=false | undetermined |
+| r2 | rich_4079 | false | **Context budget / pressure** (cat. 4) | Localization: `gold_target_file_read`/`_edited`=false | `context_window_exceeded_error`=true, reported tokens=33,378; last complete step at 11,152 prompt tokens (well below the reported failing-request size — see §D) | undetermined |
+| r3 | rich_3061 | false | **Malformed/truncated output** (cat. 6, undetermined-cause) | `test_file_edited`=true: `write_file`(idx 22)/`edit_file`(idx 26) on `tests/test_text.py`, distinct from the gold-target source file `rich/text.py` — recorded as objective verification-behavior fact only (cat. 7), not characterized as intent or generalized | `reported_error_text` contains "Unterminated string"/JSON decode failure; `malformed_output_context_boundary_evidence`="insufficient_artifact_data"; last complete step (33) at 29,642 prompt tokens | undetermined — the malformed-output termination is the terminal mechanism; no causal link to the test-file edit is established by this evidence |
+| r3 | rich_3130 | false | **Context budget / pressure** (cat. 4) | Localization: `gold_target_file_read`/`_edited`=false | `context_window_exceeded_error`=true, reported tokens=32,866; last complete step at 31,066 prompt tokens | undetermined |
+| r3 | rich_3278 | false | **Diagnosis / incorrect fix** (cat. 2), qualified by **localization failure** (cat. 1) | Edit mechanics: 3 `FileEditError` (idx 22,24,26) — contributing, non-empty patch still submitted | non-empty patch idx 27; `phase2_test_exit_code`=1; `gold_target_file_read`=`_edited`=false (differs from this task's r2 outcome — cross-repeat variability) | undetermined |
+| r3 | rich_3470 | false | **Submission failure / empty patch** (cat. 8) | Edit mechanics: 4 `FileEditError` (idx 8,9,10,12) immediately preceding `submit_patch` idx 15 — causal; target file read but never successfully edited | `submitted_patch_empty`=true; `gold_target_file_read`=true, `_edited`=false | undetermined |
+| r3 | rich_3894 | false | **Diagnosis / incorrect fix** (cat. 2) | none | non-empty patch idx 5; `phase2_test_exit_code`=1; target file read+edited | undetermined |
+| r3 | rich_3905 | **true** | contrast case (not labelled) | fee=0, target test run before submission | non-empty patch idx 19; `phase2_test_exit_code`=0 | n/a |
+| r3 | rich_4076 | false | **Diagnosis / incorrect fix** (cat. 2), qualified by **localization failure** (cat. 1) | none | non-empty patch idx 10; `phase2_test_exit_code`=1; `gold_target_file_read`=`_edited`=false | undetermined |
+| r3 | rich_4079 | false | **Context budget / pressure** (cat. 4) | Localization: `gold_target_file_read`/`_edited`=false | `context_window_exceeded_error`=true, reported tokens=46,447; last complete step at 24,155 prompt tokens | undetermined |
+
+All field values above are drawn directly from the WI-3.2 extractor's per-run JSON records (re-verified this work item, see above) and, for tool-call-index ordering and error text, from the underlying `results/m2_baseline_v2_<repeat>/traces/trace_<task_id>.json` and `task_results.jsonl` files the extractor read.
+
+#### B. Aggregate category counts
+
+Primary terminal-mechanism labels are **mutually exclusive** (exactly one per failing run, by the frozen precedence order); the two resolved `rich_3905` runs are excluded from this count as contrast cases, not failures.
+
+| Primary terminal category | Count (of 22 failures) |
+|---|---|
+| Context budget / pressure (cat. 4) | 4 |
+| Malformed/truncated tool-call output (cat. 6) | 2 |
+| Tool-call budget exhaustion (cat. 5) | 2 |
+| Submission failure / empty patch (cat. 8) | 4 |
+| Diagnosis / incorrect fix (cat. 2) | 10 |
+| **Total** | **22** |
+
+Secondary/qualifying mechanisms **overlap** with the primary label above and with each other; they are not mutually exclusive and do not sum to 22:
+- **Localization failure** (cat. 1, qualifier — gold-target file never read and never edited): 9 of 22 failures (`r1/rich_4076`, `r1/rich_4079`, `r2/rich_3130`, `r2/rich_4076`, `r3/rich_3130`, `r3/rich_3278`, `r3/rich_4076`, `r3/rich_4079`, and `r2/rich_4079`). Distribution across primary labels: 4 of these are context-pressure runs, 4 are diagnosis/incorrect-fix runs, 1 is a submission-failure/empty-patch run.
+- **Partial localization** (target file read but never edited — does not meet the codebook's strict "never read and never edited" definition, recorded separately): 2 runs (`r2/rich_3061`, `r3/rich_3470`).
+- **Edit-mechanics failure** (cat. 3, one or more `FileEditError` events, recorded as observed on every run where present): 7 of 22 failures show at least one `FileEditError`. On exactly the 4 runs labelled **submission failure/empty patch**, the `FileEditError` events immediately precede `submit_patch` and are cited as the direct, causal proximate reason for the empty result. On the other 3 (`r1/rich_3061`, `r2/rich_3278`, `r3/rich_3278`), `FileEditError` events occurred but a non-empty patch was still submitted, so they are recorded as a contributing factor only, not the terminal cause.
+- **Verification-behavior observations** (cat. 7, non-exclusive, descriptive only): `target_test_run`=true on 8 of 22 failures; `test_file_edited`=true on exactly 1 run (`r3/rich_3061`).
+
+#### C. Cross-repeat view by task
+
+| Task | r1 | r2 | r3 | Pattern |
+|---|---|---|---|---|
+| rich_3894 | diagnosis | diagnosis | diagnosis | **Consistent** — diagnosis/incorrect-fix in all 3 repeats; target file always read+edited, non-empty patch, Phase 2 assertion failure every time. |
+| rich_3278 | empty-patch (edit-mechanics) | diagnosis | diagnosis + localization | **Variable** — terminal mechanism and localization outcome both differ by repeat. |
+| rich_4076 | diagnosis + localization | empty-patch (edit-mechanics) + localization | diagnosis + localization | Variable terminal mechanism, but the gold-target file is never read or edited in **any** of the 3 repeats — the localization-failure qualifier is consistent even though the terminal category is not. |
+| rich_3905 | **resolved** | diagnosis (failed) | **resolved** | **Variable** — the only task with any resolved run; unstable 2/3 (matches the Milestone 2 x/3 classification exactly). |
+| rich_4079 | diagnosis + localization | context pressure | context pressure | Variable — r1 uniquely reached a non-empty submission before failing verification; r2/r3 both terminated via context exhaustion before any submission. Localization-failure (gold file never touched) present in all 3 repeats regardless. |
+| rich_3470 | diagnosis | empty-patch (edit-mechanics) | empty-patch (edit-mechanics) | Variable, but 2 of 3 repeats dominated by edit-mechanics-driven empty submission. |
+| rich_3130 | tool-call budget | context pressure | context pressure | Variable terminal category, but **insufficiently supported** as "the same failure" beyond a shared pattern: none of the 3 repeats ever reaches submission, and the gold-target file is never read or edited in any repeat — all 3 terminate via a resource-exhaustion mechanism (budget or context) before diagnosis is possible. |
+| rich_3061 | malformed output (undetermined-cause) | tool-call budget | malformed output (undetermined-cause) + test-file edit | Variable terminal category; insufficiently supported as one mechanism, but consistent in that no repeat ever produces a usable non-empty patch. |
+
+No new performance score is computed here; the frozen Milestone 2 x/3 counts and comparison rule (`docs/EVALUATION.md` §7) are unchanged and are the only performance metric in use.
+
+#### D. Context-involved analysis
+
+- **4 of 22 failures** carry direct, artifact-confirmed `context_window_exceeded_error`=true evidence: `r2/rich_3130` (44,651 reported tokens), `r2/rich_4079` (33,378), `r3/rich_3130` (32,866), `r3/rich_4079` (46,447). This re-confirms, from the re-verified extractor output, the count already established as fact in `docs/ROADMAP.md`'s Milestone 3 "Evidence-language discipline" section.
+- **Observable context growth**: for all 4 runs, `prompt_tokens_by_step` shows a monotonic or near-monotonic increase across recorded steps up to the last fully-recorded step (e.g. `r3/rich_3130` reaches 31,066 prompt tokens by its last complete step). This is a directly observed fact from the trace's per-step metrics.
+- **Terminal context exhaustion**: the specific reported token count at failure (32,866–46,447) comes from `reported_error_text`/`context_window_exceeded_reported_tokens`, not from the per-step metrics — in every one of the 4 runs, the last *fully recorded* step's `prompt_tokens` value is measurably lower than the reported failing-request size (e.g. `r2/rich_4079`: last complete step 11,152 vs. reported failing request 33,378). This gap is consistent with WI-3.2's finding for the `JSONDecodeError` cases: the terminating (overflowing) request itself is not captured as a complete trace step; only the harness's own error-text token count is preserved. This is recorded as an artifact-evidence limitation, not evidence of a discontinuity in actual token growth.
+- **Any proposed explanation for why the context grew** (model verbosity vs. workflow/tool-output accumulation vs. the local 32K profile specifically) is **not established** by this evidence and is marked **undetermined** for all 4 runs, per the binding Milestone 3 instruction not to assert a root cause beyond what the artifacts directly support.
+- **The frozen "five failures have direct context-limit involvement" statement** (`docs/ROADMAP.md`, Milestone 3 "Evidence-language discipline") combines these 4 directly-confirmed runs with a fifth, `r1/rich_3061`, whose context-boundary involvement was established during live investigation (the llama.cpp server's own `n_gen` log lines, observed via `docker logs` at the time) but — per WI-3.2's finding, re-confirmed by this work item's re-run of the extractor — **that live evidence is not preserved in the frozen `results/` artifacts** and cannot be re-derived from them. WI-3.3 therefore reports `r1/rich_3061` and `r3/rich_3061` as **malformed/truncated output, undetermined-cause** per the codebook (both show `malformed_output_context_boundary_evidence`="insufficient_artifact_data"), while leaving the ROADMAP's already-frozen five-failure statement as an existing fact of record, established outside the scope of what this artifact-only work item can independently re-verify. This is recorded as a genuine artifact-evidence limitation, not a contradiction to be resolved by this work item.
+
+#### E. Evidence-quality limitations
+
+- **Missing ephemeral model-server evidence**: the live llama.cpp server's per-request token-count log lines (which would allow deterministically sub-classifying `r1/rich_3061` and `r3/rich_3061` as context-boundary-evidenced vs. undetermined-cause malformed output) were never written to any file under `results/` and no longer exist. Both runs are correctly and permanently reported as `insufficient_artifact_data` rather than guessed.
+- **Trace step metrics undercount the final, failing request** in all 4 context-window-exceeded runs (see §D) — `prompt_tokens_by_step` reflects only completed steps, not the size of the overflowing request itself. Any future instrumentation wanting to close this gap is a Milestone 4/instrumentation question, out of scope here.
+- **Codebook ambiguity encountered**: the codebook's localization-failure definition ("never read and never edited... or edits applied only to a different file") does not have a clean answer for a run where the gold-target file **was read but never successfully edited** (`r2/rich_3061`, `r3/rich_3470`, both terminating for other reasons — tool-call budget and empty-patch respectively). These two runs are recorded as "partial localization" (§B) rather than forced into the strict cat. 1 definition or silently ignored. No codebook wording was changed to resolve this; it is recorded as an ambiguity for a later work item or the project owner to consider.
+- **No other run** required a forced or guessed classification; every one of the 24 runs matched a codebook category (or a contrast-case exemption) directly from the frozen evidence. Zero runs are labelled `undetermined` at the terminal-mechanism level; all `undetermined` markings in the table above are at the **underlying/root-cause** level only, per the conservative-attribution instruction — the terminal mechanism itself is evidenced in every case.
+
+#### F. No intervention selected
+
+This work item reports what the evidence establishes. It does not select, rank, recommend, implement, or pre-commit any Milestone 4 intervention. That decision belongs to a later work item (WI-3.6, per `docs/ROADMAP.md`) after the remaining Milestone 3 work (WI-3.4 owner spot-check, WI-3.5 budget-compatibility analysis) is complete.
+
+#### Owner spot-check set (AC3-6 — PENDING)
+
+The following 4 runs are proposed as a bounded, contrast-oriented spot-check sample. **This is a proposal only; AC3-6 remains PENDING until the project owner actually reviews these (or another) runs and records agreement or disagreement.** No owner agreement is claimed here.
+
+1. **`r1/rich_3905` (resolved contrast case).** Proposed classification: not a failure; contrast case. Evidence trail: `results/m2_baseline_v2_r1/task_results.jsonl` (`resolved: true`), `results/m2_baseline_v2_r1/traces/trace_rich_3905.json` (submit_patch at tool-call idx 8, `phase2_test_exit_code`=0). Owner should verify: that this run's process (fast, clean submission, target file read+edited, test run before submission) looks like a genuine success and not an artifact of a lenient grading path.
+2. **`r3/rich_4079` (explicit context-window run).** Proposed classification: context budget/pressure (cat. 4); localization-failure qualifier (gold-target file never touched). Evidence trail: `task_results.jsonl` `error` field containing `ContextWindowExceededError` at 46,447 tokens; `traces/trace_rich_4079.json` step-by-step `prompt_tokens` growth to 24,155 at the last complete step. Owner should verify: that the reported 46,447-token figure and the "gold file never read" finding both hold up against the raw trace, and that the "undetermined root cause" call (not asserting model verbosity vs. workflow design) is the right level of caution.
+3. **`r2/rich_3470` (edit-mechanics-heavy, empty patch).** Proposed classification: submission failure/empty patch (cat. 8), with `FileEditError` at idx 15, 17, 28 cited as the direct cause. Evidence trail: `traces/trace_rich_3470.json` tool-call sequence around those indices; `task_results.jsonl` `agent_patch_size: 0`. Owner should verify: that the three `FileEditError` events genuinely precede and explain the empty submission, rather than being incidental.
+4. **`r1/rich_3470` (non-empty patch, incorrect fix).** Proposed classification: diagnosis/incorrect fix (cat. 2). Evidence trail: `patches/rich_3470.patch` (non-empty), `task_results.jsonl` (`phase2_test_exit_code`=1, resolved=false). Owner should verify: that the patch is genuinely a plausible-but-wrong fix (supporting cat. 2) rather than something that should have been caught as a localization or edit-mechanics problem instead.
+
+**VERIFIED**
+- Extractor re-verification: 24 records, 8 per repeat, 2 resolved (`rich_3905` r1/r3), byte-identical across two runs, all 84 input files byte-identical before/after (hashes recomputed and diffed).
+- All 24 counted runs (22 failures + 2 resolved contrast cases) are represented in the table in §A.
+- Aggregate primary-category counts in §B sum to 22, reconciling exactly with the 22 failure rows in §A.
+- Every terminal-mechanism label in §A cites a specific extracted field and/or trace tool-call index.
+- The 4 directly-confirmed context-window-exceeded runs (§D) match the count and token values already recorded in the WI-3.2 entry above.
+
+**PARTIAL**
+- The ROADMAP's frozen "five failures have direct context-limit involvement" statement: 4 of the 5 are independently re-confirmed here from the frozen artifacts; the 5th (`r1/rich_3061`) rests on evidence this work item confirms is no longer present in `results/` (see §D). The statement itself is left unchanged, as instructed; this work item records the artifact-level limitation rather than resolving it.
+- Two runs (`r2/rich_3061`, `r3/rich_3470`) show a "target file read but never edited" pattern that does not cleanly fit the codebook's strict localization-failure wording (§E) — recorded as an ambiguity, not resolved by reinterpreting the codebook.
+
+**UNPROVEN**
+- Any underlying/root-cause attribution (model capability vs. agent-workflow friction vs. local development-profile limitation) for any of the 22 failures. All 22 are marked `undetermined` at the root-cause level in §A, per the conservative-attribution instruction; only the terminal mechanism is evidenced.
+- Owner agreement with any proposed classification (AC3-6, spot-check set above) — explicitly PENDING, not claimed.
+- Whether the codebook's localization-failure wording should be revised to cover the "read but not edited" case — flagged, not decided, by this work item.

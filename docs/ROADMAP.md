@@ -292,11 +292,11 @@ WI-3.1 is documentation/codebook only:
 - No Milestone 4 work.
 - No new planning documents beyond this roadmap section.
 
-### Work items (planned; only WI-3.1 is executed now)
+### Work items (WI-3.1 through WI-3.3 complete; WI-3.4 onward not yet started)
 
-- **WI-3.1: Establish the milestone (this work item).** Freeze the codebook, define signals and evaluation design, define acceptance criteria, define script governance. Documentation only.
-- **WI-3.2 (future):** Implement the single read-only deterministic signal-extraction script, per the governance frozen in WI-3.1.
-- **WI-3.3 (future):** Label all 24 counted runs against the frozen codebook, using the extracted signals; every label cites its supporting raw artifact.
+- **WI-3.1: Establish the milestone.** Complete. Froze the codebook, defined signals and evaluation design, defined acceptance criteria, defined script governance. Documentation only.
+- **WI-3.2: Deterministic signal-extraction script.** Complete. `scripts/m3_extract_signals.py`, per the governance frozen in WI-3.1. See [EXPERIMENTS.md](EXPERIMENTS.md).
+- **WI-3.3: Label all 24 counted runs.** Complete. Applied the frozen codebook to all 24 counted runs (22 failures labelled, 2 `rich_3905` runs recorded as resolved contrast cases); every label cites its supporting raw artifact. See [EXPERIMENTS.md](EXPERIMENTS.md). AC3-6 (owner spot-check) remains PENDING — a bounded 4-run sample was proposed, not yet reviewed.
 - **WI-3.4 (future):** Project-owner spot-check of a bounded sample of labels.
 - **WI-3.5 (future):** Competition-budget compatibility analysis — compare the frozen local dev budgets (30 tool calls / 20 min / 300 s) against the sample submission's own Kaggle budgets (`eval_config.yaml`: 10 calls / 1 min / 50 turns / 60 s, ignored by the local CLI) in light of the labelled failure modes, particularly the tool-call-budget and context-budget categories.
 - **WI-3.6 (future):** Synthesize the labelled evidence; pre-register secondary process metrics for a later intervention experiment; select exactly one evidence-backed next-intervention hypothesis, or conclude explicitly that the evidence is insufficient to select one.
@@ -371,7 +371,7 @@ Edit-mechanics failures (category 3) are recorded as an observed contributing fa
 - **AC3-11:** $0 spend throughout.
 - **AC3-12:** a build-journal closure entry is written when the milestone closes.
 
-None of AC3-2 through AC3-12 is satisfied yet. This work item (WI-3.1) establishes the criteria and the codebook; it does not claim to meet them.
+None of AC3-2 through AC3-12 was satisfied by WI-3.1; this work item establishes the criteria and the codebook only. **Status update (WI-3.3, recorded here for traceability; full evidence in EXPERIMENTS.md):** AC3-2 (all 24 runs labelled/undetermined), AC3-3 (reproducible deterministic extraction, from WI-3.2), AC3-4 (raw evidence under `results/` unchanged, re-verified), AC3-5 (every label cites raw-artifact evidence), and AC3-7 (all context-involved failures received explicit treatment) are now satisfied. AC3-6 (owner spot-check), AC3-8 (budget-compatibility analysis), AC3-9 (secondary-metric pre-registration), AC3-10 (intervention hypothesis or explicit insufficiency conclusion), and AC3-12 (build-journal closure entry) remain **not yet satisfied**. AC3-11 ($0 spend) holds throughout.
 
 ### Analysis script governance (defined now; **not implemented** in WI-3.1)
 
