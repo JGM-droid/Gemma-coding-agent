@@ -974,3 +974,67 @@ Execution order (from `tasks.jsonl`, identical to r1/r2): `rich_4079`, `rich_407
 **What r3 establishes:** the third and final independent, unoptimized measurement of the frozen configuration completed cleanly under the identical procedure used for r1 and r2, bringing the total measured baseline task-runs to 24 of 24. The host remained infrastructure-failure-free across all three repeats despite two of them reaching severe (though non-fatal) memory pressure on the same task.
 
 **What r3 does NOT establish:** any task's final x/3 classification or stability label, the baseline's overall PASS/PARTIAL/FAIL result, or any post-baseline environment-control confirmation — all remain for the next bounded work item per EVALUATION.md §7–§8.
+
+---
+
+### Experiment: Milestone 2 post-baseline environment control (EVALUATION.md §8)
+
+**This is a control/validation work item, not a counted model-performance run.** No model was run, no `swegemma` sample_submission agent was invoked, and no result from it counts toward the 24-run baseline tally. Its sole purpose is to check whether the benchmark environment drifted across the three counted repeats.
+
+**Precondition (VERIFIED):** branch `main`, HEAD `e4e312e`, clean, synced with `origin/main`, before and after. All six prior evidence sets (`m2_baseline_r1`, `m2_dryrun`, `m2_dryrun_v2`, `m2_baseline_v2_r1`, `m2_baseline_v2_r2`, `m2_baseline_v2_r3`) and the eight `m2_canon_rich_*` pre-baseline eligibility-gate directories were hashed before the control and reverified unchanged afterward.
+
+**Pre-control host state:** OpenClaw inactive/disabled; RAM 1,466 MiB used, 6,443 MiB available; swap 336/2,048; GPU idle, 1,541 MiB used by unrelated processes; `docker ps` empty; port 8080 free; disk 946 GB free; sandbox image ID reverified `sha256:76734ccbf1c4…` (matches the frozen pin exactly); harness venv confirmed, `cachetools` 7.2.0 and `networkx` 3.7 reconfirmed importable. **No model server was started** — EVALUATION.md §8 requires no model for this control.
+
+**Result namespace:** `results/m2_post_baseline_control/` (one subdirectory per task: `rich_3894`, `rich_3278`, `rich_4076`, `rich_3905`, `rich_4079`, `rich_3470`, `rich_3130`, `rich_3061`), confirmed absent before the control.
+
+**Cache procedure (EVALUATION.md §8 step 1–2):** `/tmp/swegemma_sp_cache_v8/` found present (leftover from r3) and explicitly cleared. The pool fingerprint was independently recomputed before the rebuild: **MATCH**, `e02d3059f9c04716d0b6e46d90364a5370e45385b284ab8c1c56a9c0d63aba60`, 124 files. The cache was then rebuilt by the first control gate (`rich_3894`); the fingerprint was independently recomputed after rebuild: **MATCH**, `c52a777befd2b12c719eb6363c547a82f3fe1c8e1f5821d72beea3a4e612bc47`. Both match the frozen values exactly, byte-for-byte.
+
+**Eligibility gates (EVALUATION.md §8 step 3).** Exact invocation per task (no model, no agent):
+```bash
+swegemma eval --tasks kaggle_data/tasks.jsonl --snapshots-dir kaggle_data/snapshots \
+  --submission-dir kaggle_data/sample_submission --results-dir results/m2_post_baseline_control/<task> \
+  --image swebench-sandbox:latest --sandbox docker --skip-agent-patch \
+  --task-ids <task> --timeout-seconds 300 --concurrency 1 --display single --verbose
+```
+Run individually for all 8 frozen dev tasks (verified against `tasks.jsonl` and the frozen list in EVALUATION.md §1): `rich_3894`, `rich_3278`, `rich_4076`, `rich_3905`, `rich_4079`, `rich_3470`, `rich_3130`, `rich_3061`. All 8 completed in 8–10 s each with `resolved=false`, `test_exit_code=1`, `tool_calls=0`, `total_llm_calls=0`, `error=null` — no unexpected error, no timeout (all well under the 300 s limit), no crash.
+
+**Comparison against the pre-baseline gate results (EVALUATION.md §8 step 4).** The authoritative pre-baseline evidence is the WI-2.2c canonical eligibility walk (commit `66288d6`, `results/m2_canon_rich_*`), reverified present and unchanged by hash before this control:
+
+| Task | Pre-baseline (WI-2.2c) | Post-control | Match |
+|---|---|---|---|
+| `rich_3894` | exit 1; 1 failed (`test_inspect.py::test_qualname_in_slots`), 41 passed, 4 skipped | exit 1; identical 1 failed, 41 passed, 4 skipped | **MATCH** |
+| `rich_3278` | exit 1; 16 failed (`test_ansi.py::test_strip_private_escape_sequences[…]`, 16 parametrizations), 7 passed | exit 1; identical 16 failed (same 16 parametrizations), 7 passed | **MATCH** |
+| `rich_4076` | exit 1; 4 failed in `test_ansi.py` (`test_decode`, `test_decode_example`, `test_decode_issue_2688[…]`, `test_decode_newlines`), 20 passed | exit 1; identical 4 failed (same test IDs), 20 passed | **MATCH** |
+| `rich_3905` | exit 1; 1 failed (`test_progress.py::test_no_output_if_progress_is_disabled_non_interactive`), 38 passed | exit 1; identical, 38 passed | **MATCH** |
+| `rich_4079` | exit 1; 1 failed (`test_markdown.py::test_inline_code_in_table_cells`), 7 passed | exit 1; identical, 7 passed | **MATCH** |
+| `rich_3470` | exit 1; 1 failed (`test_console.py::test_capture_and_record`), 97 passed | exit 1; identical, 97 passed | **MATCH** |
+| `rich_3130` | exit 1; 5 failed in `test_markdown.py` (`test_markdown_render`, `test_inline_code`, `test_markdown_table`, `test_inline_styles_in_table`, `test_inline_styles_with_justification`) | exit 1; identical 5 failed (same test IDs), 1 passed | **MATCH** |
+| `rich_3061` | exit 1; 12 failed in `test_panel.py`/`test_text.py`, 11 assertions + 1 `AttributeError` (`test_extend_style`) | exit 1; identical 12 failed (same test IDs, including `test_extend_style` `AttributeError`), 100 passed, 1 warning | **MATCH** |
+
+All 8 tasks: identical `resolved` value (`false`), identical failing test IDs, identical failure type (assertion or `AttributeError`, no collection/import/setup errors), identical counts. No environmental, repository, or sandbox anomaly was observed in any of the 8 gates.
+
+**`/workspace` code under test.** The pre-baseline WI-2.2c record included an explicit one-off `rich.__file__` probe (not part of the harness's own standard output) confirming `/workspace/rich/__init__.py` for every eligible task. This control did not re-run that identical ad hoc probe script, so a fresh literal print of `rich.__file__` is not captured as evidence here (recorded as PARTIAL below). Instead, this control relies on mechanism-level equivalence: the sandbox image ID was independently reverified as byte-identical to the frozen pin (`sha256:76734ccbf1c4…`), the harness install is unchanged (same `swegemma` 0.2.7, verified via the reconfirmed dependency versions), and `swegemma.harness.container_setup` unconditionally extracts each task's snapshot into `/workspace` inside the container regardless of `--skip-agent-patch` (confirmed by reading the installed source, not by memory). Combined with byte-identical failing-test IDs across all 8 tasks, this is strong indirect evidence that `/workspace` code remained under test, though it falls short of the literal fresh probe the pre-baseline record captured.
+
+**Environment-control verdict (per EVALUATION.md §8):** both frozen fingerprints matched exactly, and all 8 tasks' `resolved` values, failing test IDs, and failure types matched their pre-baseline counterparts exactly. **No unexplained eligibility or fingerprint change occurred.** Per EVALUATION.md §8's rule ("any unexplained eligibility or fingerprint change invalidates the baseline until it is investigated"), there is nothing here requiring the baseline to be invalidated or investigated. The 24 counted baseline measurements (`m2_baseline_v2_r1`, `_r2`, `_r3`) remain interpretable with respect to environment stability.
+
+**Post-control validation:** all 8 control result directories inspected directly (`summary.json`, `task_results.jsonl`, `test_outputs/*.log`). Both fingerprints recomputed and matched. No model or agent-patch run occurred (`tool_calls=0`, `total_llm_calls=0` for all 8). No benchmark repository was manually altered — each gate used a fresh snapshot extraction per the harness's own unmodified `container_setup` logic. `docker ps` returned to empty after the control (no lingering containers). OpenClaw confirmed inactive/disabled throughout. Final host state: RAM 1,499 MiB used, 6,410 MiB available, swap 336/2,048 (essentially unchanged from pre-control, since no model workload ran). All prior evidence hashes (six result sets plus eight `m2_canon_rich_*` directories) reverified byte-identical before and after.
+
+**VERIFIED**
+- Both frozen fingerprints (wheel pool, rebuilt cache) matched their authoritative values exactly, independently recomputed.
+- All 8 post-baseline eligibility gates completed with `resolved=false`, no model, no agent patch, no timeout, no crash.
+- All 8 gates' failing test IDs, counts, and failure types matched the pre-baseline WI-2.2c evidence exactly, with no unexplained difference.
+- No infrastructure anomaly occurred: `docker ps` empty before and after, OpenClaw inactive/disabled throughout, sandbox image ID unchanged.
+- No prior evidence (six result sets, eight pre-baseline gate directories) was modified.
+
+**PARTIAL**
+- The `/workspace` import-path condition is supported by mechanism-level reasoning (unchanged image ID, unchanged harness source, unconditional snapshot-to-`/workspace` extraction) and by identical failing-test signatures, rather than by a freshly re-run literal `rich.__file__` probe matching the pre-baseline record's exact ad hoc method.
+
+**UNPROVEN**
+- Whether the environment would remain stable under a fourth, currently unplanned repeat; this control speaks only to the state after the three completed repeats.
+- Anything about model or agent-quality performance; this work item explicitly excluded that.
+
+**What this control establishes:** the canonical environment (wheel pool, rebuilt cache, sandbox image, harness) reproduced the exact pre-baseline eligibility state for all 8 frozen dev tasks after the three counted baseline repeats, with both frozen fingerprints matching exactly. Nothing here indicates environment drift, and the 24 measured baseline task-runs remain interpretable on environment-stability grounds.
+
+**What this control does NOT establish:** any task's x/3 stability classification, the baseline's overall PASS/PARTIAL/FAIL verdict per EVALUATION.md §7, or any conclusion about model or agent coding performance.
+
+**Next required Milestone 2 work item:** the formal three-round x/3 synthesis and PASS/PARTIAL/FAIL determination per EVALUATION.md §7, using the now-complete evidence from `m2_baseline_v2_r1`, `_r2`, `_r3` and this environment control. This was explicitly deferred from this work item per its own instructions and EVALUATION.md's step ordering (control, then project-lead review, then synthesis).
