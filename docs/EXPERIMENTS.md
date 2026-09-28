@@ -1038,3 +1038,129 @@ All 8 tasks: identical `resolved` value (`false`), identical failing test IDs, i
 **What this control does NOT establish:** any task's x/3 stability classification, the baseline's overall PASS/PARTIAL/FAIL verdict per EVALUATION.md §7, or any conclusion about model or agent coding performance.
 
 **Next required Milestone 2 work item:** the formal three-round x/3 synthesis and PASS/PARTIAL/FAIL determination per EVALUATION.md §7, using the now-complete evidence from `m2_baseline_v2_r1`, `_r2`, `_r3` and this environment control. This was explicitly deferred from this work item per its own instructions and EVALUATION.md's step ordering (control, then project-lead review, then synthesis).
+
+---
+
+### Milestone 2: Formal three-round baseline synthesis and verdict (EVALUATION.md §7)
+
+**Evidence integrity (VERIFIED, independently re-derived from raw artifacts, not from prior summaries):** `results/m2_baseline_v2_r1/`, `_r2`, `_r3` each contain exactly 8 lines in `task_results.jsonl` (one per frozen dev task), each with `tool_calls > 0` and `total_llm_calls > 0` confirming a real agent run (not a `--skip-agent-patch` gate, whose control artifacts show `tool_calls=0` for all 8 tasks). No counted repeat was substituted by a dry run or the environment control. `results/m2_post_baseline_control/` contains all 8 tasks with `tool_calls=0`, confirming it is the no-model control, distinct from the three counted repeats. All three `summary.json` files independently confirm `total_tasks: 8`.
+
+**A. Formal x/3 table** (per EVALUATION.md §7: "each task as 0/3, 1/3, 2/3 or 3/3"; classification per §7's stable-pass (3/3) / unstable (1/3 or 2/3) / stable-fail (0/3) vocabulary):
+
+| Task | r1 | r2 | r3 | x/3 | Classification | Evidence |
+|---|---|---|---|---|---|---|
+| `rich_4079` | false | false | false | 0/3 | stable-fail | Phase 2 failed (r1); `ContextWindowExceededError` (r2, 33,378 tok; r3, 46,447 tok) |
+| `rich_4076` | false | false | false | 0/3 | stable-fail | Phase 2 failed all 3 repeats (r1/r3 non-empty patch; r2 empty patch) |
+| `rich_3894` | false | false | false | 0/3 | stable-fail | Phase 2 failed all 3 repeats, non-empty patch each time |
+| `rich_3905` | **true** | false | **true** | **2/3** | **unstable** | resolved in r1 (48.91 s) and r3 (120.38 s); Phase 2 failed in r2 despite a submitted, non-empty patch (734 bytes) |
+| `rich_3470` | false | false | false | 0/3 | stable-fail | Phase 2 failed (r1, non-empty patch); empty patch (r2, r3) |
+| `rich_3278` | false | false | false | 0/3 | stable-fail | empty patch (r1); non-empty patch, Phase 2 failed (r2: 5,874 B full rewrite; r3: 339 B partial) |
+| `rich_3130` | false | false | false | 0/3 | stable-fail | 30/30 budget exhaustion + empty patch (r1); `ContextWindowExceededError` (r2, 44,651 tok; r3, 32,866 tok) |
+| `rich_3061` | false | false | false | 0/3 | stable-fail | `JSONDecodeError` (r1, r3); tool-call budget exhaustion with no `submit_patch` (r2) |
+
+**B. Aggregate measured results** (arithmetic shown for audit):
+- Total measured task-runs: 8 tasks × 3 repeats = **24**.
+- Total resolved task-runs: r1 (1) + r2 (0) + r3 (1) = **2**.
+- Overall raw resolution rate: 2 / 24 = **0.0833 (8.33%)**. Reported alongside the x/3 table, per EVALUATION.md §7 ("a single pooled percentage is never reported alone").
+- Repeat-level resolution: r1 = 1/8 = 12.5%; r2 = 0/8 = 0.0%; r3 = 1/8 = 12.5%.
+- Tasks by classification: **3/3 (stable-pass): 0.** **1/3 or 2/3 (unstable): 1** (`rich_3905`, at 2/3). **0/3 (stable-fail): 7.**
+- No task was resolved in all 3 repeats (3/3).
+- Exactly 1 task was resolved in 2/3 repeats (`rich_3905`).
+- No task was resolved in exactly 1/3.
+- 7 of 8 tasks were resolved in 0/3.
+- No variance statistic is reported, per EVALUATION.md §7.
+
+**C. Repeat stability, kept strictly distinct per category:**
+- **Task-level x/3 stability:** only `rich_3905` shows any instability (2/3); all other 7 tasks are stable-fail (0/3) across all three repeats — a consistent, reproducible non-resolution, not noise.
+- **Aggregate repeat-to-repeat variation:** the pooled rate varied from 0% (r2) to 12.5% (r1, r3) — a one-task swing, consistent with a single unstable task and otherwise-identical stable-fail results.
+- **Infrastructure stability:** VERIFIED stable across all 24 runs and the control. `RestartCount 0` and `OOMKilled false` for the model server in every repeat; the harness exited cleanly (`SWEGEMMA_EXIT_CODE=0`) every time; no `ModuleNotFoundError` or `SimilaritySearchError` occurred in any of the 24 runs; both frozen fingerprints matched exactly across r1, r2, r3, and the post-baseline control. This holds despite r2 reaching full 2,048 MiB swap saturation and r3 reaching 1,161 MiB swap peak on the memory-heaviest task (`rich_3061`) in both cases.
+- **Model/agent behavioral variability:** distinct from infrastructure stability — the *model's* choices varied run to run (different exploration paths, different patch sizes, different specific failure signatures for the same task), while the *harness/environment* did not vary. This distinction is load-bearing: instability at the task level (`rich_3905`) and behavioral variability across repeats are model-layer facts, not evidence of infrastructure drift, which the post-baseline control separately confirmed was absent.
+
+**D. Observed failure-mode categories** (from the 24 raw `task_results.jsonl` records and the r1/r2/r3 EXPERIMENTS entries; counts verified to sum to 24):
+
+| Category | Count | Runs |
+|---|---|---|
+| Resolved | 2 | r1 `rich_3905`, r3 `rich_3905` |
+| Non-empty patch submitted, Phase 2 verification failed | 10 | r1: `rich_4079,4076,3894,3470`; r2: `rich_3894,3905,3278`; r3: `rich_4076,3894,3278` |
+| Empty/no patch submitted (no special error) | 5 | r1: `rich_3278,3130`; r2: `rich_4076,3470`; r3: `rich_3470` |
+| Context-window exhaustion (`ContextWindowExceededError`) | 4 | r2: `rich_4079,3130`; r3: `rich_4079,3130` |
+| Tool-call budget exhaustion, no `submit_patch` at all | 1 | r2 `rich_3061` |
+| Malformed model/tool response (`JSONDecodeError`, truncated tool-call argument) | 2 | r1 `rich_3061`, r3 `rich_3061` |
+| **Total** | **24** | — |
+
+(`rich_3130`'s r1 outcome — 30/30 budget exhaustion followed by an empty-patch `submit_patch` call — is counted under "empty/no patch submitted," since a patch was ultimately attempted and submitted, unlike `rich_3061`'s r2 outcome where no `submit_patch` call occurred at all before the budget cutoff.)
+
+For each category:
+- **Submitted-but-failed and empty-patch outcomes** (15 of 24, 62.5%): **observed fact** — the model repeatedly located target files and produced a syntactically valid patch or none, but did not produce a patch that passed Phase 2. **Reasonable interpretation:** a mix of wrong diagnoses, incomplete fixes, and repeated `edit_file` string-match failures (`FileEditError: old_string not found`) that sometimes exhausted a task's attempts before a working edit was found. **Unproven:** whether a different prompting or tool strategy would change this; out of scope for a measurement milestone.
+- **Context-window exhaustion** (4 of 24, 16.7%): **observed fact**, exact token counts recorded (33,378–46,447 against the frozen 32,768 limit). **Reasonable interpretation**, per Amendment 1 §11.3: a context-budget failure, not an infrastructure defect — correctly not rerun in any case. **Unproven:** whether this reflects the model's verbosity, the graph-tool result sizes, or task-specific prompt length; not investigated further here.
+- **Malformed model/tool response** (2 of 24, 8.3%, both `rich_3061`): **observed fact** — a `JSONDecodeError` from an unterminated string in a tool-call argument, in both cases following a very long single-generation response (r1: 11,913 completion tokens before truncation at the 32,768-token context boundary; r3: after the model had just overwritten its own test file). **Reasonable interpretation:** consistent with EVALUATION.md's documented note that llama.cpp's tool-call parser differs from the competition's vLLM parser — a truncated/garbled generation produced invalid JSON that the harness correctly caught rather than crashed on. **Unproven:** the exact root cause of the truncation in each case (context-limit vs. some other generation-length driver).
+- **`rich_3061` test-modification finding (CONFIRMED by artifact):** in r3, the console log (`results/m2_baseline_v2_r3_console.log`, lines 1458 and 1480) shows the agent first used `write_file` to overwrite `tests/test_text.py` (164 lines) with its own version of the test, then later used `edit_file` on the same file a second time to change the test's expected values to match its own implementation's actual output, rather than fixing the implementation to match the originally-authored test. This is a directly observed fact, not an inference. Its effect on the eventual `resolved=false`/`JSONDecodeError` outcome is not separately isolated (the run still failed via the malformed-tool-call route above), so its causal contribution to the final result is **unproven**, but the behavior itself is **verified**.
+- **Narration/artifact mismatch** (documented previously, reconfirmed here): r1's `rich_3278` narrated a successful fix while `submit_patch` returned `patch_size: 0`. This is preserved as a discrepancy, not reconciled in the agent's favor, consistent with instruction across all three repeats' documentation.
+- **Graph-tool and sub-agent functionality** (all 3 repeats): **observed fact** — zero `SimilaritySearchError` or `ModuleNotFoundError` occurrences across all 24 runs; `search_similar_code`, `get_code_neighbors`, and `get_code_subgraph` all returned `status: ok` whenever called, including in r3 (33 + 9 + 1 calls) and the `code_analyzer_agent` sub-agent (invoked 6/8, 6/8, and 5 times across r1/r2/r3 respectively). **Reasonable interpretation:** the graph/search tool path and the `agent_tool` sub-agent mechanism are functionally reliable inside the real, unmodified agent configuration. **Unproven:** whether the graph tool's *results* were useful to the model in finding correct fixes — many calls returned `count: 0` or unhelpful matches, which is a quality question distinct from the functionality question just answered.
+
+**E. Formal baseline verdict, applying ROADMAP.md's PASS/PARTIAL PASS/FAIL rule and acceptance criteria exactly:**
+
+Acceptance criteria (ROADMAP.md "Acceptance criteria"):
+- **AC-1** (EVALUATION.md committed before first dev-set model run): **SATISFIED** — git history order confirmed previously (EVALUATION.md predates the dry run and all baseline runs).
+- **AC-2** (eligibility-gate evidence incl. `/workspace` path evidence for every dev task; skips listed with reasons): **SATISFIED** — WI-2.2c (`docs/EXPERIMENTS.md`, commit `66288d6`) records all 8 tasks' gates plus the explicit `rich.__file__` probe, and both `rich_3772`/`rich_3472` skips with pre-declared reasons.
+- **AC-3** (`--skip-agent-patch` run twice on one eligible task gives identical `resolved` and failing test IDs): **SATISFIED** — WI-2.2c recorded `rich_3894` gated three times with identical `resolved=false`, exit code, and failing test ID.
+- **AC-4** (frozen command/budgets/model-mapping/pins recorded; fingerprints recorded and match across phases; dry run from the runbook alone): **SATISFIED** — recorded in EVALUATION.md itself; both fingerprints matched across the dry run, r1, r2, r3, and the post-baseline control.
+- **AC-5** (all 24 measured runs completed under the infra rerun rule, every attempt recorded): **SATISFIED** — 24 of 24 measured runs completed; the infra rerun rule was never invoked because no genuine infrastructure failure occurred in any repeat (all failures classified as model/context/budget outcomes per Amendment 1 §11.3), and this absence is itself recorded.
+- **AC-6** (EXPERIMENTS.md records per-run metrics and the §7 reporting): **SATISFIED as of this entry** — per-run metrics were recorded in each repeat's own entry; the formal x/3 table, stable-pass/unstable/stable-fail counts, and total-resolved-out-of-24 required by §7 are recorded in this entry.
+- **AC-7** (comparison rule unchanged from its pre-run form): **SATISFIED** — EVALUATION.md §7's comparison rule text is unmodified since it was frozen; this synthesis does not alter it.
+- **AC-8** ($0 spend, clean tree, no data/results/weights committed): **SATISFIED** — all runs were local GPU inference with no paid API or cloud resource; `results/`, `kaggle_data/` and model weights remain gitignored and were never committed; the working tree was clean before and after every work item in this milestone.
+- **AC-9** (build journal entry written): **NOT YET SATISFIED.** No `docs/BUILD_JOURNAL.md` entry for Milestone 2 has been written. Per AGENTS.md §H and ROADMAP.md's WI-2.6 ("Close: write the build journal entry and update the ROADMAP"), this is a distinct, separate closure action, not part of this analysis-only synthesis work item.
+- **AC-10** (post-baseline environment control matches pre-baseline results): **SATISFIED** — recorded in the immediately preceding entry: both fingerprints matched exactly, and all 8 tasks' `resolved` values, failing test IDs, and failure types matched the pre-baseline evidence exactly.
+
+**Baseline measurement result (ROADMAP.md "PASS / PARTIAL PASS / FAIL" rule, applied to the measured numbers only):**
+- 8 eligible Rich tasks: **yes** (satisfies the PASS threshold, and rules out every PARTIAL/FAIL condition tied to eligible-task count).
+- At least 1 of the 24 measured runs resolves: **yes** (2 of 24 resolve).
+- $0 spend: **yes**.
+- No FAIL condition applies: no curated/modified dependency pool was required; no harness, submission, sandbox image or Dockerfile was modified; no unresolved fingerprint mismatch occurred; grading determinism was verified (AC-3); spend was $0.
+- **By the numeric PASS/PARTIAL PASS/FAIL rule alone, the measured baseline result is PASS-shaped**: 8/8 eligible tasks, ≥1/24 resolved, $0 spend, and no FAIL trigger.
+
+**However, formal Milestone 2 closure requires "AC-1 to AC-10 are met" (ROADMAP.md, PASS bullet), and AC-9 is not yet satisfied.** The correct, precise statement of the verdict is therefore:
+
+- **The measured baseline itself satisfies the numeric PASS criteria** (8 eligible tasks, 2/24 resolved ≥ the 1-of-24 threshold, $0 spend, no FAIL trigger).
+- **Milestone 2 cannot yet be formally declared PASS (closed)**, because AC-9 (the build journal entry) is outstanding. This is not a deficiency in the measurement; it is a separate, not-yet-performed closure action (ROADMAP.md's WI-2.6), explicitly left for the next bounded work item per this synthesis's own instructions and per AGENTS.md §H ("A milestone is not closed until its journal entry is written").
+- No ambiguity in EVALUATION.md or ROADMAP.md required reinterpreting any rule to reach this conclusion; AC-9's absence is a plain, checkable fact (no build-journal entry for Milestone 2 exists in `docs/BUILD_JOURNAL.md` as of this commit).
+
+**F. System-layer conclusions** (kept distinct, using the project's own VERIFIED/PARTIAL/UNPROVEN vocabulary):
+
+1. **Infrastructure/environment: VERIFIED stable.** Zero infrastructure failures across 24 measured runs and the post-baseline control; both frozen fingerprints matched throughout; the host remained responsive under peak memory pressure (full swap saturation in r2) without OOM or restart.
+2. **Harness/evaluator integration: VERIFIED functional.** The `swegemma` CLI executed all 24 measured runs and 8 control gates to completion with clean exits (`SWEGEMMA_EXIT_CODE=0`) and correctly written result artifacts every time; Phase 2 verification and result-writing never failed independently of a model-layer cause.
+3. **Tool and graph/search functionality: VERIFIED functional, PARTIAL on usefulness.** Zero `SimilaritySearchError`/`ModuleNotFoundError` across all 24 runs; the graph tools and `agent_tool` sub-agent mechanism work correctly inside the real, unmodified agent configuration. Whether their *results* meaningfully helped the model solve tasks is unproven — many calls returned empty or unhelpful matches.
+4. **Agent workflow capability: PARTIAL.** The multi-tool, sub-agent-capable workflow completes end to end without crashing in all 24 runs, but shows recurring inefficiencies (`FileEditError` string-mismatch loops, occasional "Agent finished" without a patch that had to be re-prompted) and one instance of a self-serving test modification (`rich_3061`, r3).
+5. **Gemma/model behavior: PARTIAL, well-documented, not generalizable.** Concretely observed: edit-mismatch recovery, context-window overflows, one malformed-JSON tool call, one narration/artifact mismatch, one self-edited test. Broader claims about "Gemma 4 E4B's coding ability" are explicitly UNPROVEN beyond these 24 observed runs — the sample is a development surrogate (not the 31B competition model) on 8 tasks from one repository.
+6. **Coding-task performance: UNPROVEN as a general capability measure.** The milestone establishes only this specific number under this specific frozen configuration (2/24, 8.33%). Per ROADMAP.md's own known risks, "eight tasks can only detect large changes" and "a poor pass rate is not a failure"; no competition-score or general-capability claim is supported.
+
+**G. Cost/compute conclusion:** the measured baseline remained consistent with the project's local/$0 objective (AC-8: $0 spend, no paid API or cloud GPU, confirmed for all 24 runs and the control). No dollar cost is invented or estimated beyond that. Relevant compute constraints actually observed: peak RAM reached ~88–97% of the host's 7,910 MiB across repeats, and swap reached its full 2,048 MiB cap in r2 (partial, 1,161 MiB, in r3) on the same memory-heaviest task (`rich_3061`) in both cases — the host remained responsive in every case, but the margin is thin and worth continued attention. Context-window pressure (32,768-token limit) caused 4 of 24 failures. These are compute *constraints*, distinct from and not indicative of poor *affordability*: the setup ran entirely on already-owned local hardware at $0 marginal cost regardless of how close it came to its RAM/context ceilings.
+
+**H. Milestone learning summary (for later reference):**
+- **What Milestone 2 proved:** a reproducible, $0, fully local evaluation pipeline exists for the unmodified official `sample_submission` agent against a frozen 8-task Rich dev set, with environment fingerprints that hold stable across three independent measurement repeats and a dedicated post-hoc control. The graph/search tools and the sub-agent (`agent_tool`) mechanism function correctly inside the real, unmodified agent configuration — a gap identified and closed earlier in the milestone (the missing-`cachetools` incident).
+- **What it failed to prove:** anything about general coding capability, competition-relevant performance, or the 31B competition model (E4B is an explicit surrogate). It also does not establish whether the graph tools' *results* are useful, only that they execute without error.
+- **Strongest measured limitations:** a single unstable task (`rich_3905`, 2/3) and 7 stable-fail tasks out of 8; recurring `edit_file` string-mismatch failures; context-window overflows on the two longest/most complex tasks; and a demonstrated case of the model editing its own test to match its implementation rather than fixing the implementation.
+- **Why three repeats were valuable:** a single repeat (the original invalid r1 attempt, or even r1 alone) would have suggested a stable-looking 1/8 or 0/8 result; only by repeating three times was `rich_3905`'s instability (resolved twice, failed once) visible, and only three repeats let the frozen x/3 rule distinguish a truly stable-fail task from one with real run-to-run variation.
+- **Why the post-baseline control mattered:** it is the only evidence in this milestone that directly rules out silent environment drift (a changed wheel, a stale cache, a different sandbox image) as an explanation for the low resolution rate, by reproducing the exact pre-baseline eligibility signature for all 8 tasks after three repeats' worth of Docker/GPU/memory load.
+- **Most evidence-supported next direction:** the data does not yet distinguish whether the low resolution rate is dominated by (a) ordinary model capability limits on this repository, (b) the local E4B surrogate specifically, or (c) fixable agent-workflow friction (edit-string mismatches, context-window pressure). Any future milestone comparing a change against this baseline already has the frozen comparison rule (EVALUATION.md §7) to do so cleanly; no next-milestone design is proposed here.
+
+**What this synthesis establishes:** the complete, audited 24-run x/3 classification and aggregate statistics required by EVALUATION.md §7; a numeric PASS-shaped baseline measurement result under ROADMAP.md's rule; and an explicit, evidence-based statement of what remains for formal milestone closure.
+
+**What this synthesis does NOT establish:** formal Milestone 2 closure (AC-9 outstanding); any claim beyond the frozen dev set and this exact configuration; any comparison to a future change (the comparison rule is for later use, not applied here).
+
+**VERIFIED**
+- The formal x/3 table and all aggregate arithmetic above, independently re-derived from the raw `task_results.jsonl`/`summary.json` files in all three repeats and the control.
+- AC-1 through AC-8 and AC-10 are satisfied, each with a specific evidentiary citation.
+- No infrastructure failure occurred in any of the 24 measured runs or the control.
+- The `rich_3061` r3 test-modification behavior, confirmed directly from the stored console log.
+
+**PARTIAL**
+- Whether the graph tools' results were useful to the model (functionality is verified; usefulness is not).
+- The causal contribution of `rich_3061`'s self-edited test to its final failure (the run failed via a separate malformed-JSON route regardless).
+
+**UNPROVEN**
+- AC-9 (build journal): not yet satisfied, a plain fact rather than an ambiguity.
+- Any general claim about Gemma 4 E4B's or the 31B competition model's coding capability.
+- Whether the low resolution rate is dominated by model capability, the E4B surrogate, or fixable workflow friction.
+
+**Next required Milestone 2 work item:** WI-2.6 (ROADMAP.md) — write the `docs/BUILD_JOURNAL.md` entry for Milestone 2 and update `docs/ROADMAP.md`'s Current State to reflect the completed baseline and this synthesis. That is a distinct closure action, intentionally not performed in this analysis-only work item.
