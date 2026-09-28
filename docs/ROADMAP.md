@@ -44,7 +44,7 @@ Evidence: [EXPERIMENTS.md](EXPERIMENTS.md). Narrative: [BUILD_JOURNAL.md](BUILD_
 
 **Status: CLOSED — PASS (baseline measurement).** Evidence: [EXPERIMENTS.md](EXPERIMENTS.md) (per-run metrics, three-round synthesis, post-baseline environment control). Narrative: [BUILD_JOURNAL.md](BUILD_JOURNAL.md), entries 15–20.
 
-**Formal result:** by the PASS/PARTIAL PASS/FAIL rule and acceptance criteria below (frozen before any model run), the measured baseline satisfies the numeric PASS conditions: 8 eligible Rich tasks, 2 of the 24 measured runs resolved (≥1 required), $0 spend, and no FAIL trigger. AC-1 through AC-10 are all now satisfied, including AC-9 (this build journal entry, entries 15–20) and AC-10 (the post-baseline environment control, which reproduced the pre-baseline eligibility state exactly). A poor pass rate is not a failure under this rule; the milestone measured the baseline and did not require a good score.
+**Formal result:** by the PASS/PARTIAL PASS/FAIL rule and acceptance criteria below (frozen before any model run), the measured baseline satisfies the numeric PASS conditions: 8 eligible Rich tasks, 2 of the 24 measured runs resolved (≥1 required), $0 spend, and no FAIL trigger. AC-1 through AC-10 are all now satisfied, including AC-9 (the build journal entry, entries 15–20) and AC-10 (the post-baseline environment control, which reproduced the pre-baseline eligibility state exactly). A poor pass rate is not a failure under this rule; the milestone measured the baseline and did not require a good score.
 
 **Verified (see EXPERIMENTS.md for full evidence):**
 - A reproducible, $0, fully local three-repeat baseline exists for the unmodified official `sample_submission` on the frozen 8-task Rich dev set: 2 of 24 measured runs resolved (r1: 1/8, r2: 0/8, r3: 1/8).
@@ -54,10 +54,6 @@ Evidence: [EXPERIMENTS.md](EXPERIMENTS.md). Narrative: [BUILD_JOURNAL.md](BUILD_
 - The post-baseline environment control reproduced the exact pre-baseline eligibility signature (same `resolved` values, same failing test IDs, same failure types) for all 8 tasks.
 
 **Important limitation:** this is a measurement milestone on one repository's 8-task slice, using the local E4B surrogate model, not the 31B competition model. It does **not** prove general coding capability, competition score, or production readiness, and it does not establish that the graph tools' results are useful (only that they run without error).
-
-# Active Milestone
-
-No milestone is currently active. Milestone 3's scope will be defined and approved by the project owner before any work begins, per [AGENTS.md](../AGENTS.md) §B/§C.
 
 ### Purpose
 
@@ -179,42 +175,34 @@ No variance statistic is reported: three repeats describe stability but don't es
 - **Regression:** at least 1 loss and 0 gains.
 - **Otherwise:** inconclusive. Moves into or out of 2/3 don't count.
 
-This rule's false-positive rate has not been measured.
+This rule's false-positive rate has not been measured. **Milestone 3 note (recorded, rule unchanged):** no baseline task reached 3/3 in Milestone 2, so the comparison rule currently has no stable-pass task against which a "loss" could be observed, and "improvement" requires at least two tasks to move all the way from ≤1/3 to 3/3 — a substantial, all-or-nothing movement, not incremental progress. This is a known sensitivity property of the frozen rule, recorded factually; the rule itself is not altered because of it.
 
-### Work items (in order)
+### Work items (closed)
 
-- **WI-2.1: Selection and feasibility survey (read-only).** Complete (PARTIAL PASS). Recorded in [EXPERIMENTS.md](EXPERIMENTS.md).
-- **WI-2.2: Download and eligibility probe (Stages 1 and 2).** Complete. It found the cache, fastapi and requests problems and led to this revision.
-- **WI-2.2a: Record findings and revise the design.** This revision.
-- **WI-2.2b: Complete the canonical wheel pool.**
-  - Download the remaining official wheels (about 75 files, about 15 MB) with the owner's Chrome session.
-  - Verify the count of 124 and each file's size against Kaggle's listing.
-  - Record the pool fingerprint.
-- **WI-2.2c: Rich eligibility walk.**
-  - Clear the cache, rebuild it, and record the cache fingerprint.
-  - Re-verify `rich_3894` and `rich_3278`.
-  - Then walk the Rich order (`rich_4076` next), downloading and gating one candidate at a time, until 8 are eligible or 16 are walked. Stop for approval if a download would break the D2 cap.
-  - Run `--skip-agent-patch` twice on one eligible task to confirm grading is deterministic under the canonical environment.
-  - Record every result and skip in [EXPERIMENTS.md](EXPERIMENTS.md).
-- **WI-2.3: Protocol freeze and dry run.**
-  - Write `docs/EVALUATION.md`: the selection rule, frozen dev IDs and skips, the command line, budgets, the fingerprint and cache rules, the runbook, and the comparison and rerun rules. Commit it.
-  - Then dry-run the runbook from a fresh shell and confirm the sampling settings reach llama.cpp. Which task the dry run uses is decided in WI-2.3 (see the risks).
-- **WI-2.4: Baseline runs** r1, r2 and r3, then the post-baseline environment control.
-- **WI-2.5: Analysis.** Record the results in [EXPERIMENTS.md](EXPERIMENTS.md).
-- **WI-2.6: Close.** Write the build journal entry and update the ROADMAP.
+- **WI-2.1: Selection and feasibility survey (read-only).** Complete (PARTIAL PASS).
+- **WI-2.2: Download and eligibility probe (Stages 1 and 2).** Complete.
+- **WI-2.2a: Record findings and revise the design.** Complete.
+- **WI-2.2b: Complete the canonical wheel pool.** Complete.
+- **WI-2.2c: Rich eligibility walk.** Complete.
+- **WI-2.3: Protocol freeze and dry run.** Complete.
+- **WI-2.4: Baseline runs** r1, r2 and r3, then the post-baseline environment control. Complete.
+- **WI-2.5: Analysis.** Complete — formal three-round synthesis in [EXPERIMENTS.md](EXPERIMENTS.md).
+- **WI-2.6: Close.** Complete — build journal entries 15–20 and this Current State update.
+
+All work items WI-2.1 through WI-2.6 are complete. Milestone 2 is closed. See [EXPERIMENTS.md](EXPERIMENTS.md) for the full evidence trail from WI-2.1 through the formal three-round synthesis and closure.
 
 ### Acceptance criteria
 
-- **AC-1:** `docs/EVALUATION.md`, with the selection rule and frozen dev IDs, is committed **before** the first dev-set model run. Git history shows the ordering.
-- **AC-2:** Every dev task has eligibility-gate evidence, including the `/workspace` path evidence. Every skipped candidate is listed with its pre-declared reason.
-- **AC-3:** Running `--skip-agent-patch` twice on one eligible task, under the canonical environment, gives identical `resolved` values and identical failing test IDs.
-- **AC-4:** The frozen command, the budget values, the dev model mapping and the environment pins are recorded. The pool and cache fingerprints are recorded and match across phases. The dry run was executed from the runbook alone in a fresh shell.
-- **AC-5:** All 24 measured runs completed under the infra rerun rule, with every attempt recorded.
-- **AC-6:** [EXPERIMENTS.md](EXPERIMENTS.md) records the per-run metrics and the reporting described above.
-- **AC-7:** The comparison rule above is unchanged from its pre-run form.
-- **AC-8:** Spend is $0. The working tree is clean. No data, results or weights are committed.
-- **AC-9:** The build journal entry is written.
-- **AC-10:** The post-baseline environment control matches the pre-baseline gate results.
+- **AC-1:** `docs/EVALUATION.md`, with the selection rule and frozen dev IDs, is committed **before** the first dev-set model run. Git history shows the ordering. **SATISFIED.**
+- **AC-2:** Every dev task has eligibility-gate evidence, including the `/workspace` path evidence. Every skipped candidate is listed with its pre-declared reason. **SATISFIED.**
+- **AC-3:** Running `--skip-agent-patch` twice on one eligible task, under the canonical environment, gives identical `resolved` values and identical failing test IDs. **SATISFIED.**
+- **AC-4:** The frozen command, the budget values, the dev model mapping and the environment pins are recorded. The pool and cache fingerprints are recorded and match across phases. The dry run was executed from the runbook alone in a fresh shell. **SATISFIED.**
+- **AC-5:** All 24 measured runs completed under the infra rerun rule, with every attempt recorded. **SATISFIED** (no infra failure occurred; the rerun rule was never invoked).
+- **AC-6:** [EXPERIMENTS.md](EXPERIMENTS.md) records the per-run metrics and the reporting described above. **SATISFIED.**
+- **AC-7:** The comparison rule above is unchanged from its pre-run form. **SATISFIED.**
+- **AC-8:** Spend is $0. The working tree is clean. No data, results or weights are committed. **SATISFIED.**
+- **AC-9:** The build journal entry is written. **SATISFIED** (entries 15–20).
+- **AC-10:** The post-baseline environment control matches the pre-baseline gate results. **SATISFIED.**
 
 ### PASS / PARTIAL PASS / FAIL
 
@@ -237,6 +225,8 @@ This rule's false-positive rate has not been measured.
 
 A poor pass rate is not a failure. The milestone measures the baseline and does not require a good score.
 
+**Final result: PASS.** All acceptance criteria satisfied; 8 eligible Rich tasks; 2 of 24 measured runs resolved; $0 spend; no FAIL condition triggered.
+
 ### Known risks
 
 - **Single-repository benchmark.** Results describe Rich tasks only. They say little about fastapi, requests or httpx tasks, and the official test set uses other repositories.
@@ -245,19 +235,154 @@ A poor pass rate is not a failure. The milestone measures the baseline and does 
 - **The canonical environment depends on the full official wheel pool** and on a temporary cache in WSL `/tmp`. A WSL restart, or a pool change, silently changes the environment unless the fingerprints are checked.
 - **Solvability is only partly checked.** The CLI has no gold-patch option (VERIFIED from `--help`), so a task may be unsolvable in this environment in ways the gate doesn't catch.
 - **The 16-candidate walk may not yield 8.** Timeouts like `rich_3772` are possible. The outcome then follows the PARTIAL PASS or FAIL rules.
-- **E4B may resolve almost nothing** (floor effect).
+- **E4B may resolve almost nothing** (floor effect). **Observed:** the floor effect did not fully occur (2/24 resolved), but the rate is very low.
 - **Eight tasks can only detect large changes.**
-- **Dry-run task choice.** A dry run on a dev task would show one dev task's behaviour before the baseline. Its choice and handling are decided in WI-2.3.
 - **Surrogate, not target:**
   - E4B results say little about the 31B competition model.
   - llama.cpp's tool-call parsing is not the competition's vLLM parser.
   - The public tasks may appear in the model's training data, which could inflate the absolute pass rate.
-- **Memory limits:** harder tasks may hit VRAM or WSL RAM limits. Such failures are classified as infrastructure failures.
+- **Memory limits:** harder tasks may hit VRAM or WSL RAM limits. Such failures are classified as infrastructure failures. **Observed:** none occurred (see EXPERIMENTS.md), though r2 reached full swap saturation on one task without failing.
 
-### Work items (closed)
+# Active Milestone
 
-All work items WI-2.1 through WI-2.6 are complete. Milestone 2 is closed (see Current State above and [EXPERIMENTS.md](EXPERIMENTS.md) for the full evidence trail from WI-2.1 through the formal three-round synthesis and this closure).
+## Milestone 3: Baseline Failure Attribution
+
+**Status: APPROVED, IN PROGRESS.** Established by WI-3.1. This is a documentation-and-analysis milestone: it studies the existing, frozen Milestone 2 evidence. It does not run the model, the agent, or any new benchmark attempt, and it does not change the agent, prompts, tools, sampling, budgets, or submission.
+
+### Purpose
+
+Milestone 2 measured a low, honest baseline (2 of 24 resolved). Before changing anything about the agent, determine **why** the other 22 runs failed, using only the evidence already collected, and distinguish — as far as that evidence permits — among:
+
+- **model/capability limitations** (the model reasoned or edited incorrectly given a fair chance to solve the task)
+- **agent-workflow friction** (the tool loop, edit mechanism, or budget shape got in the way of a model that might otherwise have succeeded)
+- **local development-profile limitations/artifacts** (the E4B surrogate, the 32,768-token local context, or llama.cpp's tool-call parsing specifically, rather than something that would also affect the 31B competition profile)
+
+What the project owner should be able to explain at the end: which of the 24 runs failed for which directly-evidenced reason, which reasons recur, and — if the evidence supports it — exactly one specific, evidence-backed hypothesis for what a later milestone should try changing, or an explicit statement that the evidence does not yet support choosing one.
+
+### Evidence-language discipline (binding for all Milestone 3 work items)
+
+Do not state that a number of baseline failures were definitively "caused by the context limit." The currently justified statement, established in Milestone 2 and carried forward as fact rather than re-derived, is:
+- four failures terminated with an explicit `ContextWindowExceededError`;
+- one additional `JSONDecodeError` (r1 `rich_3061`) has direct trace evidence of the terminating generation running to the 32,768-token context boundary before truncating;
+- therefore **five** of the 24 failures have direct context-limit involvement in their terminal event.
+
+Whether that context pressure arose primarily from model verbosity, workflow design (e.g., large tool outputs accumulating in context), the local 32K profile specifically, or some combination, is the open question this milestone exists to investigate — it is not assumed by this statement and must not be asserted without further evidence.
+
+### Scope (WI-3.1 only)
+
+WI-3.1 is documentation/codebook only:
+1. Establish this milestone as active (this section).
+2. Freeze the failure-attribution codebook below, before any run is labelled.
+3. Define, but do not extract, the deterministic signals a later work item will pull from the frozen artifacts.
+4. Document the Milestone 3 evaluation design (evidence base, what counts, what doesn't, relationship to the frozen Milestone 2 comparison rule).
+5. Record the known comparison-rule sensitivity limitation (already added to the Milestone 2 section above).
+6. Define the Milestone 3 acceptance criteria (not yet satisfied — established here for later work items to meet).
+7. Define the governance for one later, narrowly-scoped read-only analysis script, without implementing it.
+
+### Non-goals (WI-3.1 and, unless a later work item explicitly changes them, Milestone 3 generally)
+
+- No running Gemma, the agent, or any new benchmark attempt.
+- No labelling of the 24 runs yet (that is a later work item, against the codebook frozen here).
+- No implementation of the analysis script (governance only, in this work item).
+- No changes to prompts, tools, sampling, budgets, model configuration, or submission configuration.
+- No implementation of context management, edit safeguards, or test-file protections — those would be Milestone 4 interventions, not this milestone's job.
+- No downloads, no paid resources, no 31B model, no held-out tasks, no dev-set expansion.
+- No changes to `docs/EVALUATION.md` or the frozen Milestone 2 comparison rule.
+- No changes to any baseline result artifact under `results/`.
+- No Milestone 4 work.
+- No new planning documents beyond this roadmap section.
+
+### Work items (planned; only WI-3.1 is executed now)
+
+- **WI-3.1: Establish the milestone (this work item).** Freeze the codebook, define signals and evaluation design, define acceptance criteria, define script governance. Documentation only.
+- **WI-3.2 (future):** Implement the single read-only deterministic signal-extraction script, per the governance frozen in WI-3.1.
+- **WI-3.3 (future):** Label all 24 counted runs against the frozen codebook, using the extracted signals; every label cites its supporting raw artifact.
+- **WI-3.4 (future):** Project-owner spot-check of a bounded sample of labels.
+- **WI-3.5 (future):** Competition-budget compatibility analysis — compare the frozen local dev budgets (30 tool calls / 20 min / 300 s) against the sample submission's own Kaggle budgets (`eval_config.yaml`: 10 calls / 1 min / 50 turns / 60 s, ignored by the local CLI) in light of the labelled failure modes, particularly the tool-call-budget and context-budget categories.
+- **WI-3.6 (future):** Synthesize the labelled evidence; pre-register secondary process metrics for a later intervention experiment; select exactly one evidence-backed next-intervention hypothesis, or conclude explicitly that the evidence is insufficient to select one.
+- **WI-3.7 (future):** Close — build journal entry, ROADMAP update.
+
+### The failure-attribution codebook (frozen by WI-3.1)
+
+**Candidate failure dimensions/categories**, each distinguished by specific artifact evidence:
+
+1. **Localization failure** — evidence: the task's gold-target file(s) (from the task's known single-file gold patch) were never read and never edited in the run's trace, or edits were applied only to a different file. Treated as a *qualifier*, not a separate terminal mechanism (see precedence below).
+2. **Diagnosis / incorrect fix** — evidence: the gold-target file was read and edited, a non-empty patch was submitted, and Phase 2 failed on an assertion mismatch (not on a context/budget/malformed-output termination).
+3. **Edit mechanics failure** — evidence: one or more `FileEditError: old_string not found` events on the correct target file. Recorded as an observed contributing factor; only becomes the terminal label if it directly causes an empty-patch or budget-exhaustion termination (see precedence).
+4. **Context budget / context pressure** — evidence: an explicit `ContextWindowExceededError` in the run's `error` field, with its reported token count.
+5. **Tool-call budget exhaustion** — evidence: `tool_calls` reaches the frozen cap (30) and/or an explicit "tool call budget exhausted" error.
+6. **Malformed/truncated output or tool-call formatting** — evidence: a `JSONDecodeError` or equivalent tool-call parsing failure in `error`. Sub-classified as **context-boundary-evidenced** (the run's own trace/server log shows the terminating generation reaching token counts at or near the 32,768-token limit before truncating) or **undetermined-cause** (no such direct evidence).
+7. **Verification behavior** — evidence: Phase 2 exit code; whether the task's relevant/target test(s) were run before `submit_patch`; whether a test file itself was read or modified during the run (distinct from an implementation edit).
+8. **Submission failure / empty patch** — evidence: `agent_patch_size: 0` and/or no `submit_patch` call recorded before the run ended.
+
+**Multiple mechanisms per run.** Most runs will show more than one candidate signal (for example, several `FileEditError` events followed by a clean, non-empty submitted patch that still fails Phase 2). The codebook requires recording **every** observed mechanism present in a run's trace, but assigning exactly **one terminal failure mechanism** — the mechanism that directly explains why the run ended in its recorded state — using the fixed precedence order below, so labelling is deterministic and reproducible by anyone re-applying the codebook to the same artifacts.
+
+**Precedence order for terminal-mechanism assignment** (first matching condition wins):
+1. `resolved: true` — not a failure; used as a contrast case (see below), never labelled with a failure category.
+2. Infrastructure failure — already established as not present in any of the 24 counted runs (Milestone 2 synthesis); would take precedence over all model-layer categories if it ever occurred.
+3. Context budget / context pressure (category 4).
+4. Malformed/truncated tool-call output (category 6), sub-classified context-boundary-evidenced vs. undetermined-cause.
+5. Tool-call budget exhaustion (category 5).
+6. Submission failure / empty patch (category 8) — applies when none of the above terminal mechanisms is present and the run nonetheless ended with an empty or absent patch.
+7. Diagnosis / incorrect fix (category 2) — applies when a non-empty patch was submitted and Phase 2 failed, and none of the above applies.
+8. Localization failure (category 1) is recorded as a qualifier on whichever terminal mechanism above applies (most often category 7), not as its own precedence rung.
+
+Edit-mechanics failures (category 3) are recorded as an observed contributing factor on every run where they occur, regardless of the run's terminal label; they become the reason cited under the terminal label only when they are what directly produced an empty-patch or budget-exhaustion outcome.
+
+**Explicit "undetermined" outcome.** If a run's terminal state cannot be matched to any category above from the artifacts alone, it must be labelled **undetermined** — never forced into a category for convenience or tidiness. Undetermined is an expected, valid outcome of applying this codebook honestly, not a labelling failure.
+
+**Observed terminal mechanism vs. inferred root cause.** The codebook labels only the **directly evidenced, artifact-supported terminal mechanism** that ended a run (for example, "ContextWindowExceededError at 46,447 tokens"). It does not assert a **root cause** (for example, "the model is too verbose" or "the graph-tool results caused the overflow") unless the specific evidence directly supports that causal claim. Root-cause attribution — model behavior vs. agent-workflow design vs. tool-output size vs. the local 32K profile specifically — is the open question this milestone exists to investigate using the deterministic signals below, not something the codebook assumes.
+
+**Using the two resolved runs as contrast cases.** `rich_3905` (resolved in r1 and r3) is never labelled with a failure category. Its traces serve as **positive contrast cases**: the same deterministic signals (tool-call count, LLM-call count, whether the gold-target file was read/edited, whether tests were run before submission, patch size, presence/absence of `FileEditError` events) are extracted from these two successful runs so the labelled failure runs can be compared against "what a successful run's process looks like" on this same task set, not against an assumption of what success should look like.
+
+### Deterministic signals to extract (defined here; extraction is a later work item)
+
+- `FileEditError` count and sequence (position among tool calls) per run.
+- Prompt-token growth by step, where the trace or console/server log records it (llama.cpp server log `n_prompt_tokens`/`n_gen` lines, or harness-recorded token counts).
+- Largest context/tool-output contributors, where the trace records tool-response sizes (for example, large `read_file` or `search_similar_code` payloads).
+- Whether, and at what tool-call index, `submit_patch` occurred (or "never").
+- Whether the task's gold-target file(s) were read and/or edited during the run.
+- Whether the task's relevant/target test(s) were run before `submit_patch`.
+- Evidence of test-file modification (already directly observed once, in r3 `rich_3061`; the extraction should check for this pattern across all 24 runs, not assume it is unique).
+- Empty vs. non-empty submitted patch, and patch size.
+- Context-limit events (`ContextWindowExceededError`, with token count) and malformed-output events (`JSONDecodeError`, with any available token-count context).
+
+### Evaluation design
+
+- **Evidence base:** exactly the 24 counted runs in `results/m2_baseline_v2_r1/`, `_r2/`, `_r3/`, frozen and unchanged.
+- **Diagnostic-only evidence** (the invalid `results/m2_baseline_r1/` attempt, `results/m2_dryrun/`, `results/m2_dryrun_v2/`) may inform narrative interpretation but is never counted in any Milestone 3 statistic, matching its treatment in Milestone 2.
+- **The Milestone 2 primary comparison rule** (above, and `docs/EVALUATION.md` §7) is unchanged and is not superseded by anything in Milestone 3.
+- **Secondary process metrics** (for example, `FileEditError` rate, tool-call efficiency, or context-headroom-at-submission) may be pre-registered in a later Milestone 3 work item for use in a future intervention experiment, but must never retroactively replace the frozen primary gain/loss rule.
+- **Traceability:** every interpretive label or claim in Milestone 3 must cite the specific raw artifact(s) (file, and field or line) it is drawn from.
+- **`results/` remains unchanged** throughout Milestone 3; all Milestone 3 output is new evidence, never a modification of Milestone 2 evidence.
+
+### Acceptance criteria (established now; **not yet satisfied** — for later Milestone 3 work items to meet)
+
+- **AC3-1:** the failure-attribution codebook was frozen (committed) before any run was labelled. *(Satisfied by this entry once committed; labelling has not yet occurred.)*
+- **AC3-2:** all 24 counted runs are analyzed and labelled, or explicitly marked undetermined.
+- **AC3-3:** the deterministic signals are reproducibly extracted from the frozen artifacts (same inputs give the same outputs).
+- **AC3-4:** raw evidence under `results/` remains unchanged throughout.
+- **AC3-5:** every interpretive/attribution label cites its supporting raw-artifact evidence.
+- **AC3-6:** the project owner spot-checks a bounded sample of labels for agreement.
+- **AC3-7:** all context-involved failures (the 4 `ContextWindowExceededError` runs, plus the `JSONDecodeError` runs, sub-classified by context-boundary evidence) receive explicit treatment per the codebook.
+- **AC3-8:** a competition-budget compatibility analysis is performed.
+- **AC3-9:** secondary process metrics for a later intervention experiment are pre-registered before any intervention is attempted.
+- **AC3-10:** the milestone concludes with exactly one evidence-backed next-intervention hypothesis, or an explicit, evidence-based conclusion that the evidence is insufficient to select one.
+- **AC3-11:** $0 spend throughout.
+- **AC3-12:** a build-journal closure entry is written when the milestone closes.
+
+None of AC3-2 through AC3-12 is satisfied yet. This work item (WI-3.1) establishes the criteria and the codebook; it does not claim to meet them.
+
+### Analysis script governance (defined now; **not implemented** in WI-3.1)
+
+A later work item may implement exactly one narrowly-scoped, read-only, deterministic analysis script to extract the signals above reproducibly. Before that implementation, this governance applies:
+
+- **Purpose:** deterministically extract the defined signals from the frozen `results/m2_baseline_v2_r1/`, `_r2/`, `_r3/` artifacts into a reproducible, citable form.
+- **Allowed inputs:** read-only access to `results/m2_baseline_v2_r1/`, `_r2/`, `_r3/` (`task_results.jsonl`, `summary.json`, `patches/`, `test_outputs/`, `traces/`, `logs/`), the corresponding `*_console.log` files, and `kaggle_data/tasks.jsonl`/task definitions (for gold-target-file identification only). No other inputs, and no held-out task material.
+- **Expected outputs:** a structured, deterministic summary (for example, one record per run) of the defined signals, written to a location **outside** `results/`, so it is never mistaken for baseline evidence. The exact output location and format are fixed by the implementing work item, not here.
+- **Prohibitions:** the script must never write to, modify, rename, or delete anything under `results/`; it must not invoke the model, the harness, or Docker; it must not access held-out tasks; it must not become a general-purpose analysis framework, dashboard, package, or introduce a new dependency — the smallest single-purpose script that satisfies reproducibility is the ceiling.
+- **Retention (open governance decision, deliberately left unresolved here):** whether the script remains in the repository after producing its one-time reproducible output, or is removed once that output is committed as evidence, is **not decided by WI-3.1**. The default preference, absent a project-owner decision, leans toward removing it after use (matching the "no wrapper script unless a later, verified need justifies one" precedent from Milestone 2's D3), but the implementing work item must record whichever choice is made and why.
 
 # Future direction
 
-After a reproducible baseline exists, later work may measure the agent across more tasks and check compatibility with the exact competition model. Those milestones will be defined only when they are reached.
+After Milestone 3 identifies which failure mechanisms dominate the frozen baseline, a later milestone may design and measure exactly one evidence-backed intervention against the frozen Milestone 2 comparison rule, and/or check compatibility with the exact competition model. Those milestones will be defined only when they are reached, and only after Milestone 3's synthesis (WI-3.6) is reviewed and approved by the project owner.

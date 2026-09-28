@@ -232,7 +232,7 @@ The helper scripts used to drive Milestone 1 were temporary and are not in the r
 
 ---
 
-## Milestone 2: Baseline Agent and Reproducible Evaluation (in progress)
+## Milestone 2: Baseline Agent and Reproducible Evaluation (**PASS**, closed — see below and ROADMAP.md Current State for the formal verdict)
 
 Findings from benchmark validation (WI-2.1 and WI-2.2). No model has been run in Milestone 2 so far. These findings changed the Milestone 2 design (see [ROADMAP.md](ROADMAP.md)).
 
