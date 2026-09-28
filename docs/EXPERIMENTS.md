@@ -1164,3 +1164,57 @@ Acceptance criteria (ROADMAP.md "Acceptance criteria"):
 - Whether the low resolution rate is dominated by model capability, the E4B surrogate, or fixable workflow friction.
 
 **Next required Milestone 2 work item:** WI-2.6 (ROADMAP.md) — write the `docs/BUILD_JOURNAL.md` entry for Milestone 2 and update `docs/ROADMAP.md`'s Current State to reflect the completed baseline and this synthesis. That is a distinct closure action, intentionally not performed in this analysis-only work item.
+
+---
+
+## Milestone 3: Baseline Failure Attribution (in progress)
+
+### Experiment: WI-3.2, deterministic Milestone 3 signal extractor
+
+**Goal:** build one narrowly scoped, read-only, deterministic script that extracts the objective signals frozen by WI-3.1 (`docs/ROADMAP.md`, "Deterministic signals to extract") from the 24 counted Milestone 2 runs, without interpreting failure causes or assigning any codebook label. This is the measuring instrument for later attribution work (WI-3.3), not the attribution itself.
+
+**Result:** PASS. The script (`scripts/m3_extract_signals.py`, Python 3 standard library only, no new dependency) reads `results/m2_baseline_v2_r1/`, `_r2/`, `_r3/` (`task_results.jsonl`, `traces/trace_<task>.json`, `patches/<task>.patch`) and `kaggle_data/tasks.jsonl` (for gold-target-file identification only), and writes one deterministic JSON document with one record per run.
+
+**Invocation:**
+```bash
+python3 scripts/m3_extract_signals.py -o <output-path-outside-results/>
+```
+(stdout is used if `-o` is omitted; the script refuses `--output` paths inside `results/`.)
+
+**Inputs consumed (read-only):** `results/m2_baseline_v2_r{1,2,3}/task_results.jsonl`, `.../traces/trace_<task>.json`, `.../patches/<task>.patch` (existence/size only), and `kaggle_data/tasks.jsonl`'s `patch`/`test_patch` diff headers (for the frozen gold target file and gold target test file sets, per task — content is never used for grading, only file paths). Invalid/dry-run directories (`m2_baseline_r1`, `m2_dryrun`, `m2_dryrun_v2`, `m2_post_baseline_control`) are never read.
+
+**Output schema (per run record):** `repeat`, `task_id`, `resolved`; `submit_patch_called`, `submit_patch_tool_call_index`, `submit_patch_within_10_tool_calls` (compatibility indicator only, per EVALUATION.md §6), `submitted_patch_empty`, `submitted_patch_size_bytes_reported`/`_from_observation`, `patch_file_present`/`patch_file_size_bytes`; `total_tool_calls_recorded_in_trace`/`_reported_by_harness`, `file_edit_error_count`/`_tool_call_indices`, `file_read_error_count`/indices, `command_error_count`/indices, `budget_exceeded_event_count`/indices; `max_recorded_prompt_tokens`, `prompt_tokens_by_step`, `context_window_exceeded_error`/`_reported_tokens`, `malformed_output_error`, `malformed_output_context_boundary_evidence`; `gold_target_files`, `gold_target_file_read`/`_edited`, `gold_target_test_files`, `target_test_run`, `test_file_edited`/`_tool_call_indices`; `reported_error_text`, `phase2_test_exit_code`; and an `evidence` block citing the exact source file paths for that record.
+
+**Method and verification:**
+- **Pre-run hashes:** `sha256sum` over every file under `results/m2_baseline_v2_r1/`, `_r2/`, `_r3/` (83 files) plus `kaggle_data/tasks.jsonl` (84 files total), recorded before running the script.
+- **Independent cardinality expectation:** 3 repeats × 8 frozen dev tasks = 24 counted runs, established from `docs/EVALUATION.md` §1 before running the extractor.
+- **Cardinality result:** `counted_run_count: 24`, `{"r1": 8, "r2": 8, "r3": 8}` — matches exactly. The script itself also fails loudly (non-zero exit) if any repeat's `task_results.jsonl` does not contain exactly the 8 frozen task IDs.
+- **Determinism:** ran twice against unchanged inputs; the two output files were byte-identical (`diff` empty, identical SHA-256).
+- **Read-only:** re-hashed all 84 input files after both runs; byte-identical to the pre-run hashes.
+- **Known-value sanity checks**, using only previously VERIFIED Milestone 2 facts (not hard-coded into the script):
+  - Aggregate resolved count: extractor reports 2 resolved runs, both `rich_3905` (`r1`, `r3`). **Matches** the Milestone 2 synthesis exactly.
+  - Context-window events: extractor reports exactly 4 `context_window_exceeded_error` runs, with reported token counts `r2/rich_4079=33378`, `r2/rich_3130=44651`, `r3/rich_4079=46447`, `r3/rich_3130=32866`. **Matches** the r2/r3 EXPERIMENTS.md entries exactly, including the specific token counts.
+  - `rich_3061` r3 test-file modification: extractor reports `test_file_edited: true` with two `edit_file`/`write_file` calls at tool-call indices 22 and 26 (`write_file` then `edit_file`, both on `tests/test_text.py`, matching the gold task's own source file being `rich/text.py`, i.e. a different file). **Matches** the confirmed console-log finding from the Milestone 2 synthesis.
+  - All four checks agreed with prior evidence; none required adjusting the extractor to force an answer.
+- **Repository scope:** `git status --short` shows only the new `scripts/m3_extract_signals.py`; no result artifact, task data, prompt, tool, model configuration, dependency, or benchmark configuration file changed.
+
+**Signal that could NOT be extracted deterministically from the frozen artifacts, and why:** WI-3.1's context-related signal set called for distinguishing, for malformed/truncated tool-call output, whether the generation reached the 32,768-token context boundary before truncating ("context-boundary-evidenced") versus not. Direct inspection of the trace JSON for both `JSONDecodeError` runs (`r1`/`r3` `rich_3061`) shows the last *fully recorded* step's cumulative prompt/completion tokens (for example, r1's last complete step: 19,016 prompt + 218 completion = 19,234 total) — well below 32,768 — because the malformed generation itself was never captured as a complete trace step (the harness could not parse it into one). The specific evidence that previously supported the "reached 32,768" claim during live investigation (the llama.cpp model-server's own `n_gen`/token-count log lines, observed via `docker logs` at the time) is **not written to any file under `results/`** — it existed only in the live, ephemeral Docker container log. The extractor therefore correctly and permanently reports `malformed_output_context_boundary_evidence: "insufficient_artifact_data"` for both `JSONDecodeError` runs, rather than fabricating a boundary determination or silently omitting the field. This is a genuine, permanent limitation of the frozen `results/` evidence, not a bug in the extractor, and is recorded here so a later work item does not attempt to re-derive it from artifacts that don't contain it.
+
+**Governance decision — script retention:** the script is **retained** in the repository at `scripts/m3_extract_signals.py`. It satisfies the WI-3.1 governance conditions: narrowly scoped to this one reproducibility purpose, read-only with respect to `results/` and `kaggle_data/`, deterministic (verified above), small (one file, no new directory beyond a single `scripts/` folder — the repository's first code file), Python-standard-library-only (no new dependency), and it does not constitute an analysis framework, dashboard, service, notebook, or database. No conflict with AGENTS.md was found.
+
+**Test implementation decision:** no separate automated test file was added. The repository has no existing test-runner convention (no `tests/` directory, no pytest/unittest configuration), and adding one would introduce infrastructure disproportionate to a single script, contrary to AGENTS.md §C ("no unnecessary dependencies or files"). Verification instead used the real frozen 24-run evidence directly (determinism, cardinality, read-only, and four independent known-value sanity checks, all above) — a stronger check than a synthetic fixture would provide for this specific script. This is recorded as a considered decision, not an omission.
+
+**Generated output:** not committed. Per the preferred workflow (script committed, output reproducible/temporary, raw results untouched), the verification output used above was written outside the repository (a temporary path) and is not part of this commit. Re-running `python3 scripts/m3_extract_signals.py` from a clean checkout reproduces it exactly (see Determinism above).
+
+**VERIFIED**
+- The extractor produces exactly 24 run records (8 per repeat × 3 repeats), byte-identical across repeated runs on unchanged input.
+- All four known-value sanity checks against previously verified Milestone 2 facts matched exactly.
+- All 84 read inputs are byte-identical before and after running the extractor twice.
+- No repository file outside `scripts/m3_extract_signals.py` (and this documentation) was changed by this work item.
+
+**PARTIAL**
+- None of the extracted signals were found to be only partially extractable; each field is either fully computable or explicitly marked with a documented "not applicable" / "insufficient artifact data" / "unknown" state per WI-3.1's requirement never to force evidence into a category or silently treat missing evidence as false.
+
+**UNPROVEN**
+- Nothing about why any run failed. This work item extracts objective facts only; no failure-attribution-codebook label has been assigned to any of the 24 runs, and none is claimed here.
+- Whether the malformed-output context-boundary question could be answered by some other means (e.g., re-instrumenting a future run to persist server-side token logs); out of scope for WI-3.2, which works only with the already-frozen, unmodified evidence.
