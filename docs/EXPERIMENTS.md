@@ -1319,7 +1319,7 @@ No new performance score is computed here; the frozen Milestone 2 x/3 counts and
 
 This work item reports what the evidence establishes. It does not select, rank, recommend, implement, or pre-commit any Milestone 4 intervention. That decision belongs to a later work item (WI-3.6, per `docs/ROADMAP.md`) after the remaining Milestone 3 work (WI-3.4 owner spot-check, WI-3.5 budget-compatibility analysis) is complete.
 
-#### Owner spot-check set (AC3-6 — PENDING)
+#### Owner spot-check set (AC3-6 — see WI-3.4 below for resolution)
 
 The following 4 runs are proposed as a bounded, contrast-oriented spot-check sample. **This is a proposal only; AC3-6 remains PENDING until the project owner actually reviews these (or another) runs and records agreement or disagreement.** No owner agreement is claimed here.
 
@@ -1341,5 +1341,40 @@ The following 4 runs are proposed as a bounded, contrast-oriented spot-check sam
 
 **UNPROVEN**
 - Any underlying/root-cause attribution (model capability vs. agent-workflow friction vs. local development-profile limitation) for any of the 22 failures. All 22 are marked `undetermined` at the root-cause level in §A, per the conservative-attribution instruction; only the terminal mechanism is evidenced.
-- Owner agreement with any proposed classification (AC3-6, spot-check set above) — explicitly PENDING, not claimed.
 - Whether the codebook's localization-failure wording should be revised to cover the "read but not edited" case — flagged, not decided, by this work item.
+
+(Owner agreement with the proposed classifications was PENDING as of WI-3.3; see WI-3.4 immediately below for its resolution.)
+
+---
+
+### Experiment: WI-3.4, project-owner spot-check review
+
+**Goal:** record the project owner's independent review of the bounded 4-run spot-check sample proposed in WI-3.3, satisfying AC3-6 if the owner agrees. This work item does not re-derive, re-inspect, or re-label anything — it records a review that occurred outside the repository, against the exact evidence packets already committed in the WI-3.3 section above.
+
+**Process note (how this differs from every other entry in this file):** every other VERIFIED/PARTIAL/UNPROVEN claim in `docs/EXPERIMENTS.md` is a result this implementation agent independently derived and verified from raw artifacts. This entry is different in kind: it is a **record of the project owner's own judgment**, formed by reading the WI-3.3 evidence packets (the 24-run table, and the four detailed evidence packets presented for owner review — `r1/rich_3905`, `r3/rich_4079`, `r2/rich_3470`, `r1/rich_3470`) and independently agreeing or disagreeing with each proposed classification. It is not a new experimental result, and it was not generated or inferred by the implementation agent — it is transcribed here exactly as the project owner stated it.
+
+**Owner-review statement, as given:**
+
+> The project owner reviewed all four WI-3.3 evidence packets and explicitly agrees with all four proposed classifications:
+> 1. `r1/rich_3905` — resolved contrast case; no failure category applies.
+> 2. `r3/rich_4079` — context budget/context pressure; underlying root cause remains undetermined.
+> 3. `r2/rich_3470` — primary: submission failure/empty patch; secondary/proximate mechanism: edit mechanics; underlying root cause remains undetermined.
+> 4. `r1/rich_3470` — diagnosis/incorrect fix; underlying root cause remains undetermined.
+
+**What this does and does not establish:**
+- It establishes that the project owner, independently reviewing the same raw-artifact evidence trails cited in WI-3.3, reached the same classification for all 4 sampled runs — satisfying AC3-6's exact frozen wording ("the project owner spot-checks a bounded sample of labels for agreement") for this bounded sample.
+- It does **not** re-verify or re-derive the terminal-mechanism labels beyond what WI-3.3 already established from the raw artifacts; no trace, patch, or task-results file was re-inspected for this entry.
+- It does **not** change, weaken, or resolve the "undetermined" root-cause status recorded in WI-3.3 for any run — the owner's agreement explicitly reaffirms that root cause remains undetermined for the 3 failure cases (runs 2–4 above), consistent with WI-3.3's conservative-attribution instruction. Only the *terminal-mechanism* classifications, not any root-cause claim, are what the owner agreed with.
+- It does **not** extend agreement to the other 20 of the 24 counted runs, which were not part of this bounded sample. AC3-6 requires only a bounded sample, not exhaustive owner review of every run.
+- It is **not** a new experimental result. No script was run, no artifact was inspected, and no hash was recomputed for this entry — it is a transcription of a decision made by the project owner outside the repository, against evidence already on record.
+
+**VERIFIED**
+- The project owner reviewed the exact 4-run bounded sample proposed in WI-3.3 and recorded explicit agreement with all 4 proposed classifications, as transcribed above.
+- AC3-6 ("the project owner spot-checks a bounded sample of labels for agreement") is satisfied by this review.
+
+**PARTIAL**
+- None — this entry either records the owner's statement accurately or it does not; there is no partial-verification state for a transcription of an external judgment.
+
+**UNPROVEN**
+- Whether the owner's agreement on this 4-run sample would generalize to the other 20 counted runs — not claimed, and out of scope for a bounded spot-check by design.
+- All underlying/root-cause attributions remain exactly as undetermined as WI-3.3 left them; this entry changes no root-cause conclusion.
